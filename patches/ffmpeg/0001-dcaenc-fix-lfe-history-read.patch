@@ -1,0 +1,18 @@
+--- a/libavcodec/dcaenc.c	2026-11-17 16:24:49
++++ b/libavcodec/dcaenc.c	2026-11-17 16:24:49
+@@ -967,9 +967,14 @@
+ {
+     int k, ch;
+ 
++    /* channel_order_tab only covers the fullband channels; with LFE it holds -1 in
++     * the last slot, which read input[k * channels - 1]: one sample of the previous
++     * channel (wrong LFE history) and, for k = 0, before the start of the buffer. */
+     for (k = 0; k < 512; k++)
+         for (ch = 0; ch < c->channels; ch++) {
+-            const int chi = c->channel_order_tab[ch];
++            const int chi = (c->lfe_channel && ch == c->channels - 1)
++                                ? lfe_index[c->channel_config]
++                                : c->channel_order_tab[ch];
+ 
+             c->history[ch][k] = input[k * c->channels + chi];
+         }
