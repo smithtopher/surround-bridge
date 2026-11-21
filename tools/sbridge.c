@@ -8,11 +8,24 @@
 
 #include <ctype.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static volatile sig_atomic_t g_stop;
+static _Atomic int g_started;
+
+// Opening a capture device blocks inside CoreAudio until the user answers the microphone
+// permission prompt (or forever, if it was dismissed). Say so instead of hanging silently.
+static void *permission_hint(void *arg) {
+    (void)arg;
+    pc_sleep_us(3000000);
+    if (!atomic_load(&g_started))
+        fprintf(stderr, "still starting... capturing an audio input needs microphone permission: allow the prompt,\n"
+                        "or enable this terminal app in System Settings > Privacy & Security > Microphone\n");
+    return NULL;
+}
 static void on_signal(int s) { (void)s; g_stop = 1; }
 
 static int icontains(const char *hay, const char *needle) {
@@ -118,7 +131,11 @@ int main(int argc, char **argv) {
     SBBridge *b = sb_bridge_create();
     sb_bridge_set_upmix(b, &up);
     char err[512] = "";
-    if (sb_bridge_start(b, &cfg, err, sizeof(err)) != 0) { fprintf(stderr, "start failed: %s\n", err); return 3; }
+    pc_thread hint;
+    if (!file && pc_thread_create(&hint, permission_hint, NULL) == 0) {}   // detached in effect: exits on its own
+    int rc = sb_bridge_start(b, &cfg, err, sizeof(err));
+    atomic_store(&g_started, 1);
+    if (rc != 0) { fprintf(stderr, "start failed: %s\n", err); return 3; }
     SBStatus st;
     sb_bridge_status(b, &st);
     printf("input:  %s\noutput: %s\n", st.input, st.output);
@@ -135,8 +152,9 @@ int main(int argc, char **argv) {
         pc_sleep_us(1000000);
         sb_bridge_status(b, &st);
         if (cfg.input_file && !st.running) break;
-        printf("buffer %5.1f ms  drift %+7.1f ppm  latency ~%3.0f ms  overruns %lld  peak L %5.1f R %5.1f dB\n",
-               st.buffer_ms, st.drift_ppm, st.latency_ms, st.overruns, st.peak_db[0], st.channels > 1 ? st.peak_db[1] : -120.f);
+        printf("buffer %5.1f ms (target %4.1f)  drift %+7.1f ppm  latency ~%3.0f ms  overruns %lld  jumps %lld  peak L %5.1f R %5.1f dB\n",
+               st.buffer_ms, st.target_ms, st.drift_ppm, st.latency_ms, st.overruns, st.jumps, st.peak_db[0],
+               st.channels > 1 ? st.peak_db[1] : -120.f);
     }
     sb_bridge_destroy(b);   // stops and restores the output device
     printf("stopped\n");

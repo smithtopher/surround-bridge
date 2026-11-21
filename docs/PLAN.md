@@ -4,8 +4,9 @@
 - [x] Live pipeline (`core/bridge.c`): capture ring → drift-steered resample → upmix → AC3/DTS → IEC 61937 → exclusive output.
 - [x] CoreAudio capture back-end (`core/platform/apple/capture_coreaudio.c`).
 - [x] `sbridge` CLI; file mode and regression tests (`scripts/regress.sh`).
-- [ ] **Live test with BlackHole → the Samsung over HDMI** (silent media only). Check the drift controller
-      settles (buffer at target, ppm steady) and no overruns or underruns over a long run.
+- [x] **Live test with BlackHole → the Samsung over HDMI** (silent media): drift control settles, no
+      overruns over 2 min, ~130 ms estimated delay (2026-11-21). Underruns aren't counted yet (add a
+      counter in pc_output's render: keep-alive bursts played while real data was expected).
 - [ ] **Measure end-to-end latency and lip sync**: Safari/YouTube, QuickTime, the TV app. This decides
       how much to optimise (smaller FFT window, DTS's shorter frames, smaller buffer target).
 - [ ] Protected (DRM) content: does it play into a virtual device at all?
@@ -15,6 +16,8 @@
   BlackHole is GPL, reference only).
 - Reports its **latency** (`kAudioDevicePropertyLatency` / safety offset) so AVFoundation-based players
   delay their video to match.
+- Hand audio to the agent over **shared memory**, not an input stream: reading an input needs microphone
+  permission (TCC), which a "send my sound to the amp" tool shouldn't have to ask for.
 - 2, 6 and 8 channel modes. Multichannel input (games, VLC, real 5.1) skips the upmix.
 - Fixed 48 kHz; volume and mute handled before encoding (a bitstream can't be scaled afterwards).
 - Installer (admin password, restarts coreaudiod), Developer ID signing and notarization.

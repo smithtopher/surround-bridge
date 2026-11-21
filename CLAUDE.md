@@ -6,12 +6,17 @@ Sister project of Surround Player (`~/code/music_player`, github smithtopher/Sur
 shares the output, upmix and encode code (copied, see SHARED.md). README.md is the user-facing doc,
 docs/PLAN.md the roadmap.
 
-## Status (2026-11-20)
-- Phase 1 prototype: core pipeline, CoreAudio capture, `sbridge` CLI, file-mode regression tests (all pass).
-- **Not yet tested live:** BlackHole wasn't installed and the TV wasn't connected when this was written.
-  Next: `brew install blackhole-2ch` (the user runs it; needs admin), then
-  `sbridge run --input BlackHole --output SAMSUNG` with **silent media** played into BlackHole, and
-  watch the drift controller, overruns, latency.
+## Status (2026-11-21)
+- Phase 1 prototype **works live**: BlackHole 2ch → Dolby Digital 5.1 (upmixed) → the Samsung over HDMI
+  (`cac3`), silent media fed into BlackHole with Surround Player's `pctest play --device BlackHole2ch_UID --pcm`.
+  2-minute runs: no overruns, buffer held at target, correction settles to ~0–100 ppm, estimated
+  app→HDMI delay **~130 ms** (excluding the amp's decode). TV released cleanly every run.
+- **Microphone permission:** capturing any input (BlackHole included) needs TCC microphone access for
+  the process (the terminal app, later our menu-bar app). Without it `AudioDeviceCreateIOProcID`
+  blocks forever inside CoreAudio; `sbridge` prints a hint after 3 s. Our own driver could avoid
+  TCC by handing audio to the agent over shared memory instead of an input stream (PLAN.md).
+- Next: measure real lip sync with the user (Safari/YouTube, QuickTime). Then phase 2, our own
+  Audio Server plug-in.
 
 ## The user's setup
 - Mac → **HDMI → Samsung TV → optical → AC3 amp**. Optical can't carry multichannel PCM, hence AC3/DTS.
@@ -37,10 +42,19 @@ scripts/build_ffmpeg*.sh   same as Surround Player's (static 9.0.2, avfilter wit
   upmix graph (pc_upmix.c, output 5.1(side) for both codecs, since **FFmpeg's DTS encoder has no
   5.1(back)**) → AVAudioFifo → encoder frames → bursts → `pc_out_write` (blocks only if the 0.4 s
   output ring is full).
-- **Drift control (`steer`):** the input (virtual device) and output (HDMI) clocks differ. The output
-  ring fill (EMA) is held at `target_buffer_ms` (default 64) with a PI controller on
-  `swr_set_compensation`, updated every 24000 samples, clamped ±1000 ppm. Off in dump mode (a file
-  sink drains instantly). **Untested on a real device yet.** Tune Kp/Ki once it runs live.
+- **Drift control (`steer`):** the input (virtual device) and output (HDMI) clocks differ, so the
+  output ring fill (EMA) is held at a target by a PI controller on `swr_set_compensation`, updated
+  every 24000 samples. P 40 ppm per ms of error, I 0.8 ppm/ms/s held to ±300 ppm (**anti-windup:
+  an unbounded integral pinned the correction at the ±1000 ppm limit**), total ±1000 ppm.
+  - **Auto target** (`target_buffer_ms` 0): 2 s after the first audio it locks onto the fill reached
+    then, min one burst + 8 ms (40 ms with AC3). At start the HDMI device pulls ~35 ms ahead into
+    its own buffer, so the ring reads ~27 ms; that audio isn't lost, it's in the device latency.
+    A fixed 64 ms ring target only added delay, and filling it at ±1000 ppm took a minute.
+    Prefilling silence at start didn't help: the capture device starts later and the output plays
+    the prefill away meanwhile.
+  - **Jumps:** more than 40 ms over target → drop that much input at once (2 s cooldown). Seen once:
+    +57 ms when the app feeding BlackHole stopped. Not exercised since.
+  - Off in dump mode (a file sink drains instantly).
 - **Keep-alive:** the output plays an encoded silence burst whenever the ring is short (from
   pc_output.c), so the amp stays locked between sounds.
 - **Encoder sample formats:** AC3 = fltp (planar), DTS = s32 **packed**. Anything that copies planes

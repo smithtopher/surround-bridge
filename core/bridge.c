@@ -21,6 +21,9 @@
 #define CHUNK 1024                       // frames the worker takes at a time
 #define COMP_DISTANCE 24000              // drift correction applied over 0.5 s of output
 #define MAX_PPM 1000.0                   // clocks are within ~±100 ppm; leave headroom
+#define KP_PPM_PER_MS 40.0               // drift control: proportional, ppm per ms of buffer error
+#define KI_PPM_PER_MS_S 0.8              // integral, ppm per ms of error per second
+#define MAX_I_PPM 300.0                  // integral term limit (anti-windup)
 
 struct SBBridge {
     SBConfig cfg;
@@ -56,6 +59,10 @@ struct SBBridge {
     AVAudioFifo *fifo;
     AVChannelLayout enc_layout;
     int64_t comp_next;                   // output sample count of the next drift update
+    double target;                       // output ring fill held (s); auto: what it settles at
+    int64_t settle_at, cooldown_until;   // produced-sample marks: auto-target lock, after a jump cut
+    int target_locked;
+    _Atomic long long jumps;             // big buffer jumps corrected by dropping input
     int64_t out_samples;
     double fill_ema, integ;
 
@@ -64,6 +71,8 @@ struct SBBridge {
     float peaks[8];
     int peak_frames;
     char out_desc[512];
+    uint8_t silence[PC_MAX_BURST_BYTES];   // one encoded-silence burst, for the start-up prefill
+    int silence_len;
 };
 
 static void free_cfg_strings(SBBridge *b) {
@@ -284,19 +293,48 @@ static int to_fifo(SBBridge *b, uint8_t **data, int n) {
     return 0;
 }
 
-// Holds the output ring at the target fill by trimming the resampler (input vs output clock).
+// Holds the output ring at its target fill by trimming the resampler (input vs output clock).
+//  - auto target (target_buffer_ms 0): 2 s after audio starts, lock onto the fill reached then
+//    (the device's own buffer pulls ~30-40 ms ahead at start, so a fixed ring target only adds
+//    delay), but never below one burst + 8 ms.
+//  - a jump of more than 40 ms over target (a virtual device delivering a backlog when its
+//    clients start/stop) is cut at once by dropping that much input; following it at +-1000 ppm
+//    would take a minute of wrong lip sync.
 static void steer(SBBridge *b, int64_t produced) {
     if (b->cfg.dump_path) return;   // a file sink consumes instantly: nothing to steer against
     double fill = pc_out_buffered_seconds(b->out);
     b->fill_ema = b->fill_ema * 0.95 + fill * 0.05;
     atomic_store(&b->st_fill, b->fill_ema);
+    double burst_s = pc_enc_burst_bytes(b->enc) / 4 / 48000.0;
+    if (!b->target_locked) {
+        if (produced < b->settle_at) return;
+        double min_safe = burst_s + 0.008;
+        b->target = b->cfg.target_buffer_ms > 0 ? b->cfg.target_buffer_ms / 1000.0
+                  : b->fill_ema > min_safe ? b->fill_ema : min_safe;
+        b->target_locked = 1;
+        b->integ = 0;
+        b->comp_next = produced;
+    }
     if (produced < b->comp_next) return;
-    double target = (b->cfg.target_buffer_ms > 0 ? b->cfg.target_buffer_ms : 64) / 1000.0;
-    double err = b->fill_ema - target;                  // >0: too much buffered: input clock faster
-    b->integ += err * (COMP_DISTANCE / 48000.0);
-    if (b->integ > 2) b->integ = 2;
-    if (b->integ < -2) b->integ = -2;
-    double ppm = -(err / 8.0 + b->integ / 80.0) * 1e6;  // fix the error in ~8 s, integral for steady drift
+    double err = b->fill_ema - b->target;               // >0: too much buffered: input clock faster
+    if (err > 0.040 && produced >= b->cooldown_until) {
+        int64_t drop = (int64_t)(err * b->in_rate);
+        int64_t r = atomic_load(&b->rpos), w = atomic_load(&b->wpos);
+        if (drop > w - r) drop = w - r;
+        atomic_store(&b->rpos, r + drop);               // the consumer owns rpos: safe to skip ahead
+        atomic_fetch_add(&b->jumps, 1);
+        b->cooldown_until = produced + 2 * 48000;       // let the ring and its average catch up
+        b->fill_ema -= (double)drop / b->in_rate;
+        return;
+    }
+    double dt = COMP_DISTANCE / 48000.0;
+    // PI in ppm. Real clocks differ by tens of ppm, so: P 40 ppm per ms of error (an offset
+    // closes with a ~25 s time constant); I slowly learns the steady drift, held to +-300 ppm
+    // so it can't wind up (it used to, and pinned the correction at the limit).
+    b->integ += -err * 1000.0 * KI_PPM_PER_MS_S * dt;
+    if (b->integ > MAX_I_PPM) b->integ = MAX_I_PPM;
+    if (b->integ < -MAX_I_PPM) b->integ = -MAX_I_PPM;
+    double ppm = -err * 1000.0 * KP_PPM_PER_MS + b->integ;
     if (ppm > MAX_PPM) ppm = MAX_PPM;
     if (ppm < -MAX_PPM) ppm = -MAX_PPM;
     atomic_store(&b->st_ppm, ppm);
@@ -323,6 +361,7 @@ static void *worker_thread(void *arg) {
     int cvt_max = swr_get_out_samples(b->swr, CHUNK) + 256;
     av_samples_alloc_array_and_samples(&cvt, NULL, planes_ch, cvt_max, pfmt, 0);
     int64_t produced = 0;
+    int primed = 0;
     for (;;) {
         if (atomic_load(&b->quit)) goto done;
         int n = ring_pop(b, chunk, CHUNK);
@@ -330,6 +369,10 @@ static void *worker_thread(void *arg) {
             if (atomic_load(&b->input_eof)) break;
             pc_sleep_us(1000);
             continue;
+        }
+        if (!primed) {   // first real audio: the auto target locks 2 s from now
+            primed = 1;
+            b->settle_at = produced + 2 * 48000;
         }
         update_peaks(b, chunk, n);
         const uint8_t *in[1] = { (const uint8_t *)chunk };
@@ -400,6 +443,11 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
     atomic_store(&b->overruns, 0);
     b->fill_ema = b->integ = 0;
     b->out_samples = b->comp_next = 0;
+    b->target = 0;
+    b->target_locked = 0;
+    b->settle_at = INT64_MAX;
+    b->cooldown_until = 0;
+    atomic_store(&b->jumps, 0);
     memset(b->peaks, 0, sizeof(b->peaks));
 
     // 1. input
@@ -442,7 +490,11 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
     pc_out_set_burst_size(b->out, pc_enc_burst_bytes(b->enc));
     const uint8_t *sil = NULL;
     int sn = pc_enc_silence_burst(b->enc, &sil);
-    if (sn > 0) pc_out_set_silence_burst(b->out, sil, sn);
+    if (sn > 0) {
+        pc_out_set_silence_burst(b->out, sil, sn);
+        memcpy(b->silence, sil, sn);
+        b->silence_len = sn;
+    }
 
     // 4. converters: the input's channels/rate -> 48 kHz planar (stereo for the upmix)
     AVChannelLayout in_lay = { 0 }, stereo = AV_CHANNEL_LAYOUT_STEREO;
@@ -523,6 +575,8 @@ void sb_bridge_status(SBBridge *b, SBStatus *st) {
     st->buffer_ms = atomic_load(&b->st_fill) * 1000;
     st->drift_ppm = atomic_load(&b->st_ppm);
     st->overruns = atomic_load(&b->overruns);
+    st->jumps = atomic_load(&b->jumps);
+    st->target_ms = b->target_locked ? b->target * 1000 : 0;
     double lat = b->capfmt.latency + (b->upmixing ? 2048 / 48000.0 : 0) + (CHUNK / 2) / (b->in_rate > 0 ? b->in_rate : 48000)
                + (b->enc ? pc_enc_frame_size(b->enc) / 48000.0 : 0) + atomic_load(&b->st_fill)
                + (b->out && !b->cfg.dump_path ? pc_out_latency(b->out) : 0);

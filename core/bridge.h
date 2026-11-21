@@ -26,7 +26,7 @@ typedef struct {
     int codec;                  // SB_CODEC_*
     int ac3_bitrate_kbps;       // 0 = 640
     int dts_bitrate_kbps;       // 0 = 1509 (or 754)
-    double target_buffer_ms;    // output fill the drift control holds (0 = 64 ms)
+    double target_buffer_ms;    // output fill the drift control holds (0 = auto: what it settles at)
 } SBConfig;
 
 typedef struct {
@@ -38,6 +38,8 @@ typedef struct {
     double drift_ppm;           // resampler correction holding the buffer (input vs output clock)
     double latency_ms;          // estimated app -> HDMI delay (excluding the receiver's decode)
     long long overruns;         // input frames dropped (worker couldn't keep up)
+    long long jumps;            // sudden buffer jumps (>40 ms) cut by dropping input
+    double target_ms;           // the buffer level being held (0 until it locks, 2 s after audio starts)
     float peak_db[8];           // input peak level per channel over the last ~0.5 s (-120 = silence)
     int channels;
 } SBStatus;
