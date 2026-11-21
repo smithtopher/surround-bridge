@@ -7,16 +7,45 @@ shares the output, upmix and encode code (copied, see SHARED.md). README.md is t
 docs/PLAN.md the roadmap.
 
 ## Status (2026-11-21)
-- Phase 1 prototype **works live**: BlackHole 2ch → Dolby Digital 5.1 (upmixed) → the Samsung over HDMI
-  (`cac3`), silent media fed into BlackHole with Surround Player's `pctest play --device BlackHole2ch_UID --pcm`.
-  2-minute runs: no overruns, buffer held at target, correction settles to ~0–100 ppm, estimated
-  app→HDMI delay **~130 ms** (excluding the amp's decode). TV released cleanly every run.
-- **Microphone permission:** capturing any input (BlackHole included) needs TCC microphone access for
-  the process (the terminal app, later our menu-bar app). Without it `AudioDeviceCreateIOProcID`
-  blocks forever inside CoreAudio; `sbridge` prints a hint after 3 s. Our own driver could avoid
-  TCC by handing audio to the agent over shared memory instead of an input stream (PLAN.md).
-- Next: measure real lip sync with the user (Safari/YouTube, QuickTime). Then phase 2, our own
-  Audio Server plug-in.
+- **1.0.0: menu-bar app + installer** (`Sources/SurroundBridge`, `scripts/make_installer.sh`). Built and
+  inspected; the running path of the app (switch on → DD 5.1 to the TV) is **not yet tested in the
+  app** (the TV was off), only via `sbridge`. The installer hasn't been run (needs admin: the user).
+- Phase 1 prototype works live with `sbridge`: BlackHole 2ch → Dolby Digital 5.1 (upmixed) → the
+  Samsung over HDMI (`cac3`). 2-minute runs: no overruns, buffer held at target, ~0–100 ppm, ~130 ms
+  estimated app→HDMI delay. TV released cleanly every run.
+- **Microphone permission:** capturing any input needs TCC microphone access (the terminal for
+  `sbridge`, the app's own grant for the app: `NSMicrophoneUsageDescription`). Without it
+  `AudioDeviceCreateIOProcID` blocks forever; the app checks `AVCaptureDevice.authorizationStatus`
+  first and `sbridge` prints a hint after 3 s.
+- **BlackHole can't be bundled:** its LICENSE header says the source is GPL-3 but "Official compiled
+  BlackHole binaries and installers … All rights reserved", and the name/branding need written
+  permission for third-party distributions. So the app downloads the official installer
+  (`BlackHoleSetup.swift`: existential.audio URL, sha256 pin of 0.7.1 or Existential Audio's Developer
+  ID + notarization via `pkgutil --check-signature`), opens it, polls for the driver, then offers
+  "Restart macOS Audio" (`launchctl kickstart -k system/com.apple.audio.coreaudiod`, admin prompt).
+  The long-term fix is our own virtual device (PLAN.md phase 2).
+- Next: test the app live with the TV, the user runs the installer, lip sync check.
+
+## App (macOS, 1.0.0)
+- `BridgeApp.swift`: `MenuBarExtra(.window)` + `Settings` scene, `LSUIElement`; AppDelegate handles
+  SIGINT/SIGTERM and quit by calling `BridgeModel.shutdown()` (restores the Mac's output, releases the TV).
+  `Uninstaller` (About tab) removes the app (and optionally BlackHole) with an admin prompt.
+- `BridgeModel.swift`: the only caller of the C API, always on a serial queue (start can take ~1–2 s
+  while the TV switches format). States: off / starting / running / needsPermission /
+  noVirtualDevice / noOutput / failed. While on it sets the default output **and** the alerts
+  output to BlackHole (`AudioSystem.swift`), saving the previous ones under `restoreOutputUID` /
+  `restoreSystemOutputUID` (also restored at launch after a crash). Restarts when the chosen output
+  re-appears (matched by name: the TV's UID changes), on wake, and when the pipeline stops by itself.
+- `Upmix.swift` is Surround Player's (same keys and presets, SHARED.md); the bridge defaults to Music.
+- Settings (UserDefaults `local.surroundbridge`): `enabled`, `outputUID`, `outputName`, `codec`
+  (0 AC3, 1 DTS), `ac3Bitrate`, `dtsBitrate`, `autoSwitchOutput`, the `upmix*` keys, the restore keys.
+  Launch at login via `SMAppService.mainApp`.
+- Debug: `SURROUND_BRIDGE_DEBUG=1` (state changes + 1 s status to stderr), `SURROUND_BRIDGE_AUTOSTART=1`,
+  `SURROUND_BRIDGE_DEFAULTS=<suite>` (**always use a test suite in tests**, never the real domain).
+- Icon: `scripts/make_icon.swift` (drawn in code) → `scripts/make_icns.sh` → `Resources/AppIcon.icns`.
+- Installer: `scripts/make_installer.sh` (pkgbuild, not relocatable, → productbuild with
+  `installer/distribution.xml` + `installer/resources/*.html`; `installer/scripts/postinstall` opens
+  the app for the console user). Unsigned: right-click → Open the first time.
 
 ## The user's setup
 - Mac → **HDMI → Samsung TV → optical → AC3 amp**. Optical can't carry multichannel PCM, hence AC3/DTS.
@@ -25,7 +54,9 @@ docs/PLAN.md the roadmap.
 
 ## Layout
 ```
-core/bridge.c/.h           PORTABLE live pipeline + public API (sb_*)
+core/bridge.c, include/bridge.h   PORTABLE live pipeline + public API (sb_*); include/pc_types.h shared types
+Sources/SurroundBridge/    the menu-bar app (SwiftUI; see "App" above)
+Package.swift              SwiftPM: BridgeCore (C, core/), SurroundBridge (app), sbridge (CLI)
 core/pc_encode.c/.h        PORTABLE AC3/DTS encoder + IEC 61937 packer (planar AC3, packed s32 DTS)
 core/pc_capture.h          capture back-end interface (pccap_*)
 core/platform/apple/       capture_coreaudio.c (new), audio_coreaudio.c (shared, output)
@@ -68,7 +99,8 @@ scripts/build_ffmpeg*.sh   same as Surround Player's (static 9.0.2, avfilter wit
   media (`anullsrc`) for anything that reaches a device. Tones are fine in file mode (`sbridge file`)
   and into BlackHole *only when the bridge's output is a dump*, since BlackHole itself is inaudible.
 - **Never touch the user's real data** (Surround Player's playlist session / `local.surroundplayer`
-  defaults, or later this app's settings). Back up and restore, never delete. A previous test cleanup
+  defaults, or this app's `local.surroundbridge` settings: test with `SURROUND_BRIDGE_DEFAULTS`). The app
+  switches the Mac's default output: record it before a test and check it's restored after. Back up and restore, never delete. A previous test cleanup
   destroyed the user's 5,683-item playlist.
 - **zsh:** the Bash tool's shell is zsh, where `"$1:s..."` is a substitution modifier. Use `${1}`,
   cap generated media with `-t`, and run `ffmpeg -nostdin`.

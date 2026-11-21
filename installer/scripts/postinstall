@@ -1,0 +1,9 @@
+#!/bin/sh
+# Runs as root after the app is installed: open it for the user who's logged in, so the menu-bar
+# icon is there when the installer says "look at the top right".
+USER_NAME=$(/usr/bin/stat -f%Su /dev/console)
+USER_ID=$(/usr/bin/id -u "$USER_NAME" 2>/dev/null)
+if [ -n "$USER_ID" ] && [ "$USER_NAME" != "root" ]; then
+    /bin/launchctl asuser "$USER_ID" /usr/bin/sudo -u "$USER_NAME" /usr/bin/open -a "/Applications/Surround Bridge.app" || true
+fi
+exit 0

@@ -17,7 +17,7 @@ fi
 OUT="build/$ARCH"
 mkdir -p "$OUT"
 CFLAGS=(-arch "$ARCH" -std=c11 -O2 -g -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare -mmacosx-version-min=14.0
-        -Icore -I"$FF/include")
+        -Icore -Icore/include -I"$FF/include")
 SRCS=(core/bridge.c core/pc_encode.c core/pc_output.c core/pc_upmix.c
       core/platform/apple/audio_coreaudio.c core/platform/apple/capture_coreaudio.c)
 OBJS=()

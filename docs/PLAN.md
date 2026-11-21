@@ -22,7 +22,11 @@
 - Fixed 48 kHz; volume and mute handled before encoding (a bitstream can't be scaled afterwards).
 - Installer (admin password, restarts coreaudiod), Developer ID signing and notarization.
 
-## Phase 3: menu-bar app (macOS)
+## Phase 3: menu-bar app (macOS) ← 1.0.0 built (2026-11-21)
+- [x] Menu-bar app: on/off, status, levels, upmix presets + sliders, Settings (output, format, login, upmix, about/uninstall).
+- [x] Installer pkg (app only; BlackHole downloaded from its official site by the app, it can't be bundled).
+- [ ] Live test of the app with the TV; the user runs the installer.
+- [ ] Developer ID signing + notarization (needs the $99 Apple Developer account).
 - On/off, mode (the upmix presets shared with Surround Player), output device, status (levels,
   latency, "locked" indicator). Launch at login (SMAppService). Sleep/wake and HDMI hot-plug
   (TV input changes). Auto-switches the system output to the bridge device and back.

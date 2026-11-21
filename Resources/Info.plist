@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>Surround Bridge</string>
+    <key>CFBundleDisplayName</key><string>Surround Bridge</string>
+    <key>CFBundleIdentifier</key><string>local.surroundbridge</string>
+    <key>CFBundleExecutable</key><string>SurroundBridge</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>1.0.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>LSUIElement</key><true/>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>LSApplicationCategoryType</key><string>public.app-category.music</string>
+    <key>NSMicrophoneUsageDescription</key><string>Surround Bridge listens to the virtual audio device your apps play into, so it can send that sound to your amp as surround. Nothing is recorded or stored.</string>
+</dict>
+</plist>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<installer-gui-script minSpecVersion="2">
+    <title>Surround Bridge</title>
+    <welcome file="welcome.html" mime-type="text/html"/>
+    <license file="license.html" mime-type="text/html"/>
+    <conclusion file="conclusion.html" mime-type="text/html"/>
+    <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+    <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
+    <volume-check>
+        <allowed-os-versions><os-version min="14.0"/></allowed-os-versions>
+    </volume-check>
+    <choices-outline>
+        <line choice="local.surroundbridge.app"/>
+    </choices-outline>
+    <choice id="local.surroundbridge.app" visible="false" title="Surround Bridge">
+        <pkg-ref id="local.surroundbridge.app"/>
+    </choice>
+    <pkg-ref id="local.surroundbridge.app" version="@VERSION@" onConclusion="none">SurroundBridge-app.pkg</pkg-ref>
+</installer-gui-script>

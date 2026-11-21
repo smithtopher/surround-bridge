@@ -17,6 +17,8 @@ library repo (git submodule) instead.
 | `core/pc_types.h` | `include/playercore.h` | only PC_API, PCDevice, pc_list_output_devices, PCDeviceChangeCallback, PCUpmix |
 | `core/pc_encode.c/.h` | new: extracted from `engine.c` (open_bs_encoder, spdif_*, make_silence_burst) | standalone object; also handles packed sample formats (DTS) |
 | `scripts/build_ffmpeg.sh`, `build_ffmpeg_win.sh`, `patches/ffmpeg/` | same paths | none |
+| `Sources/SurroundBridge/Upmix.swift` | `Sources/SurroundPlayer/Upmix.swift` (1.3.2) | `import BridgeCore`; no PlayerModel extension; `load(_:defaultMode:)` |
+| `Sources/SurroundBridge/SettingsView.swift` (`UpmixBindings`, `UpmixSliders`) | `SettingsView.swift`'s upmix section | split into reusable views (menu + settings) |
 
 ## Fixes made here first (to carry over)
 
