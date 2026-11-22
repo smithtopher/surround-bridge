@@ -4,6 +4,8 @@
 # Targets:
 #   bridgecore_win  static core with the WASAPI back-ends (capture + exclusive IEC 61937 output)
 #   sbridge         CLI: devices / run / file (scripts/regress.sh drives `file`)
+#   bridgecore      bridgecore.dll for the tray app (Windows/SurroundBridge, P/Invoke): the same
+#                   sources, the public API (bridge.h, bridge_win.h) exported
 cmake_minimum_required(VERSION 3.21)
 project(SurroundBridge C)
 
@@ -43,13 +45,16 @@ if(CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
     set(SB_WARN /W4 -Wno-unused-parameter -Wno-sign-compare)   # clang-cl's -Wall means -Weverything
 endif()
 
-add_library(bridgecore_win STATIC
+set(CORE_SRCS
     "${CORE}/bridge.c"
     "${CORE}/pc_encode.c"
     "${CORE}/pc_output.c"
     "${CORE}/pc_upmix.c"
     "${CORE}/platform/windows/audio_wasapi.c"
-    "${CORE}/platform/windows/capture_wasapi.c")
+    "${CORE}/platform/windows/capture_wasapi.c"
+    "${CORE}/platform/windows/default_output.c")
+
+add_library(bridgecore_win STATIC ${CORE_SRCS})
 target_include_directories(bridgecore_win PUBLIC "${CORE}" "${CORE}/include")
 target_compile_definitions(bridgecore_win PUBLIC _CRT_SECURE_NO_WARNINGS _WIN32_WINNT=0x0A00)
 target_compile_options(bridgecore_win PRIVATE ${SB_WARN})
@@ -58,3 +63,9 @@ target_link_libraries(bridgecore_win PUBLIC ffmpeg ole32 avrt)
 add_executable(sbridge tools/sbridge.c)
 target_compile_options(sbridge PRIVATE ${SB_WARN})
 target_link_libraries(sbridge PRIVATE bridgecore_win winmm)
+
+add_library(bridgecore SHARED ${CORE_SRCS})
+target_include_directories(bridgecore PRIVATE "${CORE}" "${CORE}/include")
+target_compile_definitions(bridgecore PRIVATE PC_BUILD_DLL _CRT_SECURE_NO_WARNINGS _WIN32_WINNT=0x0A00)
+target_compile_options(bridgecore PRIVATE ${SB_WARN})
+target_link_libraries(bridgecore PRIVATE ffmpeg ole32 avrt)

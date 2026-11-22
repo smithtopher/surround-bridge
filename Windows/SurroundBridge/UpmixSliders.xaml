@@ -1,0 +1,85 @@
+<!-- The upmix sliders (the Mac app's UpmixSliders): the four main ones, and with Compact=False
+     the Advanced section too. DataContext: BridgeModel. -->
+<UserControl x:Class="SurroundBridge.UpmixSliders"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:SurroundBridge">
+    <StackPanel>
+        <Grid x:Name="Main">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="LabelCol" Width="88" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="ValueCol" Width="78" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="30" />
+                <RowDefinition Height="30" />
+                <RowDefinition Height="30" />
+                <RowDefinition Height="30" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="Surround" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
+            <Slider Grid.Row="0" Grid.Column="1" Minimum="-20" Maximum="6" TickFrequency="0.5" SmallChange="0.5" LargeChange="2"
+                    Value="{Binding SurroundSlider}" ToolTip="Rear level. The left end turns the rears off." />
+            <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding SurroundLabel}" Style="{StaticResource ValueText}" />
+
+            <TextBlock Grid.Row="1" Text="Centre focus" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
+            <Slider Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="1" TickFrequency="0.05" SmallChange="0.05" LargeChange="0.2"
+                    Value="{Binding CenterSlider}" ToolTip="How firmly centred sound (vocals, dialogue) goes to the centre speaker." />
+            <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding CenterLabel}" Style="{StaticResource ValueText}" />
+
+            <TextBlock Grid.Row="2" Text="Front width" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
+            <Slider Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="1" TickFrequency="0.05" SmallChange="0.05" LargeChange="0.2"
+                    Value="{Binding WidthSlider}" ToolTip="Width of the front stage; the middle is as recorded." />
+            <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding WidthLabel}" Style="{StaticResource ValueText}" />
+
+            <TextBlock Grid.Row="3" Text="Subwoofer" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
+            <Slider Grid.Row="3" Grid.Column="1" Minimum="-20" Maximum="6" TickFrequency="0.5" SmallChange="0.5" LargeChange="2"
+                    Value="{Binding LfeSlider}" ToolTip="Subwoofer (LFE) level. The left end turns it off." />
+            <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding LfeLabel}" Style="{StaticResource ValueText}" />
+        </Grid>
+
+        <Expander x:Name="Advanced" Header="Advanced" Margin="0,10,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="84" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="38" />
+                    <RowDefinition Height="38" />
+                    <RowDefinition Height="32" />
+                    <RowDefinition Height="32" />
+                    <RowDefinition Height="38" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="Bass crossover" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" Grid.ColumnSpan="2" VerticalAlignment="Center" ItemsSource="{x:Static local:Options.Crossovers}"
+                          SelectedValuePath="Value" SelectedValue="{Binding CrossoverHz}" />
+
+                <TextBlock Grid.Row="1" Text="Bass to subwoofer" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" VerticalAlignment="Center" ItemsSource="{x:Static local:Options.LfeMoves}"
+                          SelectedValuePath="Value" SelectedValue="{Binding LfeMove}" />
+
+                <TextBlock Grid.Row="2" Text="Bass boost" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
+                <Slider Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="12" TickFrequency="0.5" SmallChange="0.5" LargeChange="2"
+                        Value="{Binding BassDb}" />
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding BassLabel}" Style="{StaticResource ValueText}" />
+
+                <TextBlock Grid.Row="3" Text="Rear delay" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
+                <Slider Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="30" TickFrequency="1" SmallChange="1" LargeChange="5"
+                        Value="{Binding RearDelayMs}" />
+                <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding RearDelayLabel}" Style="{StaticResource ValueText}" />
+
+                <TextBlock Grid.Row="4" Text="Rear high-cut" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" VerticalAlignment="Center" ItemsSource="{x:Static local:Options.HighCuts}"
+                          SelectedValuePath="Value" SelectedValue="{Binding RearHighcutHz}" />
+
+                <TextBlock Grid.Row="5" Grid.ColumnSpan="3" Margin="0,10,0,0" Style="{StaticResource CaptionText}"
+                           Text="Crossover: bass below it goes to the subwoofer channel (changing it causes a short dropout). Most AV receivers already send the speakers' bass to the subwoofer, so a strong subwoofer level can double the bass. Rear delay keeps sounds anchored at the front; the high-cut makes the rears read as room sound rather than as speakers you can point at." />
+            </Grid>
+        </Expander>
+    </StackPanel>
+</UserControl>

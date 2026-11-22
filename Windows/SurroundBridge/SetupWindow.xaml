@@ -1,0 +1,56 @@
+<!-- Install / update / uninstall (see Installer.cs). -->
+<Window x:Class="SurroundBridge.SetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Surround Bridge Setup" Width="500" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource Bg}"
+        FontFamily="{StaticResource UiFont}" FontSize="13" UseLayoutRounding="True">
+    <StackPanel>
+        <!-- banner -->
+        <Border Padding="28,26,28,22">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#2348A0" Offset="0" />
+                    <GradientStop Color="#7444B0" Offset="1" />
+                </LinearGradientBrush>
+            </Border.Background>
+            <StackPanel Orientation="Horizontal">
+                <Image x:Name="Logo" Width="64" Height="64" Margin="0,0,18,0" RenderOptions.BitmapScalingMode="HighQuality" />
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="Heading" Text="Surround Bridge" FontSize="22" FontWeight="SemiBold" Foreground="White" />
+                    <TextBlock x:Name="SubHeading" FontSize="13" Foreground="#DDE0FF" Margin="0,3,0,0" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <StackPanel Margin="28,20,28,22">
+            <!-- install -->
+            <StackPanel x:Name="InstallPanel">
+                <TextBlock Style="{StaticResource BodyText}"
+                           Text="Everything your PC plays, sent to your amp as real surround: stereo is upmixed to 5.1 and encoded to Dolby Digital or DTS for HDMI or optical." />
+                <TextBlock Style="{StaticResource CaptionText}" Margin="0,10,0,16"
+                           Text="Surround Bridge lives in the notification area of the taskbar. The first time you switch it on, it helps you install VB-Audio Virtual Cable, the free virtual audio device your apps play into." />
+                <CheckBox x:Name="StartAtLogin" Content="Start Surround Bridge when I sign in" IsChecked="True" />
+                <CheckBox x:Name="DesktopShortcut" Content="Add a desktop shortcut" Margin="0,8,0,0" />
+                <TextBlock Style="{StaticResource CaptionText}" Margin="0,16,0,0" x:Name="WhereText" />
+            </StackPanel>
+
+            <!-- uninstall -->
+            <StackPanel x:Name="UninstallPanel" Visibility="Collapsed">
+                <TextBlock Style="{StaticResource BodyText}"
+                           Text="This removes Surround Bridge from your PC and puts Windows' sound output back where it was." />
+                <CheckBox x:Name="RemoveSettings" Content="Also remove my settings" Margin="0,14,0,0" />
+                <TextBlock Style="{StaticResource CaptionText}" Margin="0,14,0,0"
+                           Text="VB-Audio Virtual Cable stays installed, since other apps may use it. To remove it, run VB-Audio's setup again and choose &quot;Remove Driver&quot;." />
+            </StackPanel>
+
+            <!-- progress / result -->
+            <TextBlock x:Name="StatusText" Style="{StaticResource BodyText}" Margin="0,16,0,0" Visibility="Collapsed" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
+                <Button x:Name="CancelButton" Content="Cancel" MinWidth="90" Margin="0,0,10,0" Click="Cancel_Click" IsCancel="True" />
+                <Button x:Name="MainButton" Content="Install" MinWidth="110" Style="{StaticResource AccentButton}" Click="Main_Click" IsDefault="True" />
+            </StackPanel>
+        </StackPanel>
+    </StackPanel>
+</Window>

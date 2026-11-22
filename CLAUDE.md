@@ -1,6 +1,6 @@
 # Surround Bridge — working notes
 
-System-wide "Dolby Digital Live" for macOS (Windows later): apps play into a virtual audio device,
+System-wide "Dolby Digital Live" for macOS and Windows: apps play into a virtual audio device,
 the bridge upmixes stereo to 5.1, encodes AC3/DTS and sends IEC 61937 to an HDMI/optical output.
 Sister project of Surround Player (`~/code/music_player`, github smithtopher/SurroundPlayer), which
 shares the output, upmix and encode code (copied, see SHARED.md). README.md is the user-facing doc,
@@ -42,9 +42,41 @@ docs/PLAN.md the roadmap.
   refuses an input that is the loopback of the output itself (feedback). `run --dump F` writes the
   live stream to a file instead of a device (tests capture without touching the TV).
 - **Not yet tested:** VB-Cable (not installed on this PC: the only endpoint is the Samsung over
-  NVIDIA HDMI, which offers AC3 bitstream), the live capture → exclusive HDMI path, drift control
-  against a real cable clock, hot-plug. Next: install VB-Cable, `sbridge run --output SAMSUNG` with
-  silent media playing into the cable; then a tray app (C#/WinUI like Surround Player, or Win32).
+  NVIDIA HDMI, which offers AC3 bitstream; over Remote Desktop only "Remote Audio" exists), the live
+  capture → exclusive HDMI path, drift control against a real cable clock, hot-plug, the app's
+  default-output switching (IPolicyConfig) on real devices, the VB-Cable download/signature check
+  (the signer name match "VB-Audio"/"Burel" is a guess: check it on the first real install).
+
+## App (Windows 1.0.0, 2026-11-22)
+- `Windows/SurroundBridge/` (C#, .NET 8, **WPF** + WinForms NotifyIcon; WPF because it starts fast
+  as a single file and its runtime packs were cached; Surround Player's WinUI had start-up hangs).
+  P/Invoke into `bridgecore.dll` (CMake target `bridgecore`, PC_BUILD_DLL); `Native.cs` mirrors the
+  C structs. `core/include/bridge_win.h` + `platform/windows/default_output.c`: get/set the default
+  render endpoint (IPolicyConfig::SetDefaultEndpoint; role 0 console+multimedia, 1 communications).
+- `BridgeModel.cs` is a port of BridgeModel.swift (same states, restart rules, output switching with
+  `restoreOutputUID`/`restoreCommsOutputUID`); C calls on one `SerialQueue` thread. Device changes via
+  `pc_set_device_change_callback` (debounced 600 ms); wake via SystemEvents.PowerModeChanged.
+  Virtual device = input named "CABLE Output"; apps play to the output "CABLE Input".
+- UI: `FlyoutWindow` (tray popover), `SettingsWindow` (General/Upmix/About), `UpmixSliders`
+  (compact/full), `Theme.xaml` + `Theme.cs` (own control templates, light/dark from AppsUseLightTheme,
+  accent = the icon's indigo). `CableSetup.cs`: downloads VBCABLE_Driver_Pack45.zip from vb-audio.com,
+  WinVerifyTrust + signer check, runs `VBCABLE_Setup_x64.exe` elevated.
+- **The installer is the app itself** (`Installer.cs`, `SetupWindow`): the release exe, run from
+  anywhere but `%LOCALAPPDATA%\Programs\Surround Bridge\`, shows Install/Update/Reinstall; copies
+  itself there, Start menu (+ desktop) shortcut, HKCU Uninstall entry (`--uninstall`), HKCU Run
+  (`--background`). Single instance (mutex `Local\SurroundBridge`; events `.Show`, `.Quit`: updates
+  and uninstall ask the running copy to quit so it restores the output). Dev builds (bridgecore.dll
+  beside the exe) always run as the app. Crash log: `%TEMP%\SurroundBridge\crash.log`.
+- Settings: `%APPDATA%\Surround Bridge\settings.json`. **Tests: always set
+  `SURROUND_BRIDGE_SETTINGS=<scratch file>` and `SURROUND_BRIDGE_TEST_ROOT=<scratch dir>`** (install
+  dir, shortcuts and registry under `HKCU\Software\SurroundBridgeTest`), never the real ones.
+- `--snapshot <dir> [--theme light|dark]` renders every window to PNG (never switches on): the way
+  to check the UI without clicking. Verified 2026-11-22: all windows in both themes; packaged-exe
+  snapshot; quiet install/reinstall/uninstall in a test root; single instance + `.Quit`.
+- Release: `scripts\build_win.ps1 -Package` → `build\SurroundBridge-Setup-<ver>-windows-x64.exe`
+  (~69 MB). Version = `<Version>` in SurroundBridge.csproj (bump per release). Committed to the
+  `releases` branch under `Windows/` (like Surround Player). Icon: `scripts/make_ico.ps1`
+  (Resources/AppIcon-1024.png, cropped to the tile) → `Resources/AppIcon.ico`.
 
 ## App (macOS, 1.0.0)
 - `BridgeApp.swift`: `MenuBarExtra(.window)` + `Settings` scene, `LSUIElement`; AppDelegate handles
@@ -85,7 +117,8 @@ tools/sbridge.c            CLI: devices / run / file
 scripts/build.sh           clang build -> build/<arch>/sbridge (FFmpeg: $FFMPEG_PREFIX, vendor/, or ../music_player/vendor/)
 scripts/regress.sh         file-mode behavioural tests (must print ALL PASSED)
 core/platform/windows/     capture_wasapi.c (new), audio_wasapi.c (shared, output)
-CMakeLists.txt, scripts/build_win.ps1, win_env.ps1   Windows build (clang-cl + Ninja) -> .build/win-<config>/sbridge.exe
+CMakeLists.txt, scripts/build_win.ps1, win_env.ps1   Windows build (clang-cl + Ninja) -> .build/win-<config>/sbridge.exe, bridgecore.dll
+Windows/SurroundBridge/    the Windows tray app (WPF; see "App (Windows)" above)
 scripts/build_ffmpeg*.sh   same as Surround Player's (static 9.0.2, avfilter with only the needed filters)
 ```
 

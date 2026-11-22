@@ -3,3 +3,5 @@ vendor/
 .DS_Store
 *.spdif
 .build/
+Windows/SurroundBridge/bin/
+Windows/SurroundBridge/obj/

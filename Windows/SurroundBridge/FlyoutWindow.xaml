@@ -1,0 +1,97 @@
+<!-- The tray flyout (the Mac app's menu-bar popover): on/off, what's happening, levels, the
+     upmix mode and the main sliders. DataContext: BridgeModel. -->
+<Window x:Class="SurroundBridge.FlyoutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SurroundBridge"
+        Title="Surround Bridge" Width="384" SizeToContent="Height"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent" ResizeMode="NoResize"
+        ShowInTaskbar="False" Topmost="True" Left="-10000" Top="-10000"
+        FontFamily="{StaticResource UiFont}" FontSize="13" UseLayoutRounding="True">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="Vis" />
+    </Window.Resources>
+    <Border x:Name="Root" Margin="12" CornerRadius="8" Background="{DynamicResource FlyoutBg}"
+            BorderBrush="{DynamicResource CardBorder}" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="16" ShadowDepth="3" Opacity="0.28" />
+        </Border.Effect>
+        <StackPanel Margin="16,14,16,10">
+            <!-- header -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Image x:Name="AppIcon" Width="34" Height="34" VerticalAlignment="Center" Margin="0,0,12,0"
+                       RenderOptions.BitmapScalingMode="HighQuality" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="Surround Bridge" Style="{StaticResource TitleText}" />
+                    <DockPanel Margin="0,2,0,0">
+                        <Ellipse Width="7" Height="7" Fill="{Binding DotBrush}" VerticalAlignment="Center" Margin="0,1,6,0" />
+                        <TextBlock Text="{Binding StatusLine}" Style="{StaticResource CaptionText}" MaxHeight="34" TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                </StackPanel>
+                <ToggleButton Grid.Column="2" Style="{StaticResource Switch}" VerticalAlignment="Center" Margin="10,0,0,0"
+                              IsChecked="{Binding Enabled}" x:Name="OnOff" AutomationProperties.Name="Surround Bridge on or off" />
+            </Grid>
+
+            <!-- what's stopping it, in plain language -->
+            <Border x:Name="NoticeBox" Style="{StaticResource Notice}" Margin="0,12,0,0" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock x:Name="NoticeText" Style="{StaticResource BodyText}" FontSize="12" />
+                    <Button x:Name="NoticeButton" Margin="0,8,0,0" Padding="10,3" FontSize="12" Click="Notice_Click" />
+                </StackPanel>
+            </Border>
+
+            <!-- levels -->
+            <Grid Margin="0,12,0,0" Visibility="{Binding IsRunning, Converter={StaticResource Vis}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="16" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="12" />
+                    <RowDefinition Height="12" />
+                </Grid.RowDefinitions>
+                <TextBlock Text="L" Style="{StaticResource CaptionText}" FontSize="10" VerticalAlignment="Center" FontFamily="Consolas" />
+                <Grid Grid.Column="1" Height="6">
+                    <Border CornerRadius="3" Background="{StaticResource MeterFill}" />
+                    <Border CornerRadius="3" Background="{DynamicResource Track}" RenderTransformOrigin="1,0.5">
+                        <Border.RenderTransform><ScaleTransform ScaleX="{Binding MeterLRest}" /></Border.RenderTransform>
+                    </Border>
+                </Grid>
+                <TextBlock Grid.Row="1" Text="R" Style="{StaticResource CaptionText}" FontSize="10" VerticalAlignment="Center" FontFamily="Consolas" />
+                <Grid Grid.Row="1" Grid.Column="1" Height="6">
+                    <Border CornerRadius="3" Background="{StaticResource MeterFill}" />
+                    <Border CornerRadius="3" Background="{DynamicResource Track}" RenderTransformOrigin="1,0.5">
+                        <Border.RenderTransform><ScaleTransform ScaleX="{Binding MeterRRest}" /></Border.RenderTransform>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <Border Style="{StaticResource Rule}" />
+
+            <!-- upmix -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="160" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Stereo upmix" Style="{StaticResource BodyText}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" ItemsSource="{x:Static local:Options.UpmixModes}" SelectedValuePath="Value"
+                          SelectedValue="{Binding UpmixMode}" AutomationProperties.Name="Stereo upmix mode" />
+            </Grid>
+            <TextBlock Text="{Binding UpmixBlurb}" Style="{StaticResource CaptionText}" Margin="0,8,0,4" />
+            <local:UpmixSliders Compact="True" Visibility="{Binding UpmixEnabled, Converter={StaticResource Vis}}" Margin="0,2,0,0" />
+
+            <Border Style="{StaticResource Rule}" Margin="0,10,0,6" />
+
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Quit" Click="Quit_Click" />
+                <Button Style="{StaticResource LinkButton}" Content="Settings…" Click="Settings_Click" HorizontalAlignment="Left" Margin="-8,0,0,0" />
+            </DockPanel>
+        </StackPanel>
+    </Border>
+</Window>

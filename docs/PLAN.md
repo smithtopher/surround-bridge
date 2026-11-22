@@ -36,9 +36,11 @@
 - [x] WASAPI capture back-end (`capture_wasapi.c`): capture endpoints and loopback of render
       endpoints, with a silent render stream keeping loopback continuous.
 - [ ] Live test: VB-Cable → Dolby Digital → the Samsung over HDMI (silent media); drift, overruns.
-- [ ] Tray app; switch the default output to the cable while on, restore it after.
+- [x] Tray app (WPF) with the Mac app's controls; switches the default output to the cable while on.
+- [x] One-file self-installing release (per user), VB-Cable download + signature check.
+- [ ] Live test of the app with VB-Cable and the TV; code signing (SmartScreen warns until then).
 - Same core. Capture: **WASAPI loopback** of a virtual endpoint. That endpoint needs a virtual audio
   driver, which on Windows is **kernel-mode** (Microsoft's SysVAD sample) and needs an EV certificate
   plus Microsoft attestation signing. Interim: use VB-Audio Cable as the virtual device.
 - Output: `audio_wasapi.c` (already in core/, from Surround Player). Tray app instead of a menu-bar app.
-- Build: CMake + clang-cl like Surround Player (to be added here).
+- Build: CMake + clang-cl like Surround Player (`scripts/build_win.ps1`).

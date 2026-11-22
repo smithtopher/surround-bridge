@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Surround Bridge for Windows: WPF tray app on bridgecore.dll (core/, CMake target "bridgecore").
+       scripts\build_win.ps1 -App builds both; -Package makes the one-file release (which installs itself). -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>SurroundBridge</RootNamespace>
+    <AssemblyName>SurroundBridge</AssemblyName>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\Resources\AppIcon.ico</ApplicationIcon>
+    <!-- Windows release version (shown in About and in Settings ▸ Apps). Bump for each release. -->
+    <Version>1.0.0</Version>
+    <Product>Surround Bridge</Product>
+    <Company>smithtopher</Company>
+    <Description>Surround Bridge</Description>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <EngineDir>$(MSBuildThisFileDirectory)..\..\.build\win-release\</EngineDir>
+  </PropertyGroup>
+
+  <!-- one file: .NET + WPF + bridgecore.dll (static FFmpeg and CRT) inside the exe -->
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="..\..\Resources\AppIcon.ico" Link="Resources\AppIcon.ico" />
+    <None Include="$(EngineDir)bridgecore.dll" Link="bridgecore.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="CheckEngine" BeforeTargets="Build">
+    <Error Condition="!Exists('$(EngineDir)bridgecore.dll')"
+           Text="bridgecore.dll not found in $(EngineDir): run scripts\build_win.ps1 first" />
+  </Target>
+</Project>

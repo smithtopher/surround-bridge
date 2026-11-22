@@ -1,5 +1,26 @@
 # Changelog
 
+## [Windows 1.0.0] — 2026-11-22
+
+First Windows release: everything your PC plays, sent to your amp as Dolby Digital or DTS surround.
+
+- **Tray app** (notification area), the counterpart of the Mac menu-bar app:
+  - switch it on and off, see what it's doing (format, output, delay) and the input levels;
+  - pick the upmix mode and adjust the main levels.
+- **Settings:** output device, Dolby Digital or DTS and the bitrate, the virtual cable, start at sign-in;
+  Upmix (the same presets and sliders as on the Mac, Advanced included); About and Uninstall.
+  Light and dark, following Windows.
+- **While it's on**, Windows' sound output (and the communications output) points at the virtual
+  cable; the previous outputs come back when it's off, or at the next start after a crash.
+- **It restarts by itself** when the TV re-appears (input change, wake from sleep).
+- **First-run help:** installs VB-Audio Virtual Cable from VB-Audio's official package (downloaded,
+  signature-checked, its own installer).
+- **One-file installer:** per user, no administrator rights; Start menu (and optional desktop)
+  shortcut, start at sign-in, an entry in Settings ▸ Apps to uninstall. `--install --quiet` and
+  `--uninstall --quiet` for unattended use.
+- **Under the hood:** the same C core as the Mac app (`bridgecore.dll`), with WASAPI capture
+  (`capture_wasapi.c`) and the exclusive IEC 61937 output shared with Surround Player.
+
 ## [1.0.0] — 2026-11-21
 
 First release: everything your Mac plays, sent to your amp as Dolby Digital or DTS surround.

@@ -1,0 +1,168 @@
+<!-- Settings: General (output, format, virtual cable, start at sign-in), Upmix (every slider),
+     About (credits, uninstall). The Mac app's SettingsView. DataContext: BridgeModel. -->
+<Window x:Class="SurroundBridge.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SurroundBridge"
+        Title="Surround Bridge Settings" Width="580" Height="760" MinWidth="480" MinHeight="420"
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource Bg}"
+        FontFamily="{StaticResource UiFont}" FontSize="13" UseLayoutRounding="True">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="Vis" />
+        <Style x:Key="Page" TargetType="ScrollViewer">
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="Padding" Value="20,18,20,4" />
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource BodyText}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,12,0" />
+        </Style>
+    </Window.Resources>
+
+    <TabControl x:Name="Tabs">
+        <!-- General -->
+        <TabItem Header="General">
+            <ScrollViewer Style="{StaticResource Page}">
+                <StackPanel>
+                    <TextBlock Text="Output" Style="{StaticResource HeaderText}" />
+                    <Border Style="{StaticResource Section}">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Send to" Style="{StaticResource FieldLabel}" />
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding Outputs}" DisplayMemberPath="Label" SelectedValuePath="Uid"
+                                          SelectedValue="{Binding OutputUid}" x:Name="OutputBox" AutomationProperties.Name="Send to" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource CaptionText}" Margin="0,8,0,0" x:Name="NoOutputs" Foreground="{DynamicResource Text}"
+                                       Text="No HDMI or optical output with Dolby Digital is connected. Connect your TV, receiver or soundbar and switch it on." />
+                            <TextBlock Style="{StaticResource CaptionText}" Margin="0,8,0,0"
+                                       Text="The HDMI or optical output your TV, receiver or soundbar is connected to. Surround Bridge uses it exclusively while it's on." />
+                            <Border Style="{StaticResource Rule}" />
+                            <CheckBox Content="Switch Windows' sound to Surround Bridge while it's on" IsChecked="{Binding AutoSwitchOutput}" />
+                            <TextBlock Style="{StaticResource CaptionText}" Margin="26,4,0,0"
+                                       Text="Everything that plays then goes through the bridge. Turning it off puts the previous output back." />
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Surround format" Style="{StaticResource HeaderText}" />
+                    <Border Style="{StaticResource Section}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="Format" Style="{StaticResource FieldLabel}" />
+                            <ComboBox Grid.Column="1" ItemsSource="{x:Static local:Options.Codecs}" SelectedValuePath="Value"
+                                      SelectedValue="{Binding Codec}" AutomationProperties.Name="Format" />
+                            <TextBlock Grid.Row="1" Text="Bitrate" Style="{StaticResource FieldLabel}" Margin="0,10,12,0" />
+                            <Grid Grid.Row="1" Grid.Column="1" Margin="0,10,0,0">
+                                <ComboBox ItemsSource="{x:Static local:Options.Ac3Bitrates}" SelectedValuePath="Value" SelectedValue="{Binding Ac3Bitrate}"
+                                          Visibility="{Binding IsAc3, Converter={StaticResource Vis}}" AutomationProperties.Name="Dolby Digital bitrate" />
+                                <ComboBox ItemsSource="{x:Static local:Options.DtsBitrates}" SelectedValuePath="Value" SelectedValue="{Binding DtsBitrate}"
+                                          Visibility="{Binding IsDts, Converter={StaticResource Vis}}" AutomationProperties.Name="DTS bitrate" />
+                            </Grid>
+                            <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Style="{StaticResource CaptionText}" Margin="0,10,0,0"
+                                       Visibility="{Binding IsDts, Converter={StaticResource Vis}}"
+                                       Text="Some TVs don't pass DTS on to an amp over optical. If the amp stays silent, use Dolby Digital." />
+                        </Grid>
+                    </Border>
+
+                    <TextBlock Text="Virtual audio device" Style="{StaticResource HeaderText}" />
+                    <Border Style="{StaticResource Section}">
+                        <StackPanel>
+                            <DockPanel>
+                                <Button x:Name="CableButton" DockPanel.Dock="Right" Click="Cable_Click" VerticalAlignment="Center" />
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                    <TextBlock Text="VB-Audio Virtual Cable" Style="{StaticResource BodyText}" />
+                                    <TextBlock x:Name="CableState" Style="{StaticResource CaptionText}" />
+                                </StackPanel>
+                            </DockPanel>
+                            <TextBlock Style="{StaticResource CaptionText}" Margin="0,10,0,0"
+                                       Text="Apps play into the cable's &quot;CABLE Input&quot;; Surround Bridge listens to it, upmixes and encodes the sound and sends it to your amp." />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Section}">
+                        <CheckBox Content="Start Surround Bridge when you sign in" IsChecked="{Binding LaunchAtLogin}" />
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
+
+        <!-- Upmix -->
+        <TabItem Header="Upmix">
+            <ScrollViewer Style="{StaticResource Page}">
+                <StackPanel>
+                    <TextBlock Text="Stereo upmix" Style="{StaticResource HeaderText}" />
+                    <Border Style="{StaticResource Section}">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="140" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Upmix stereo to 5.1" Style="{StaticResource FieldLabel}" />
+                                <ComboBox Grid.Column="1" ItemsSource="{x:Static local:Options.UpmixModes}" SelectedValuePath="Value"
+                                          SelectedValue="{Binding UpmixMode}" AutomationProperties.Name="Upmix mode" />
+                            </Grid>
+                            <TextBlock Text="{Binding UpmixBlurb}" Style="{StaticResource CaptionText}" Margin="0,8,0,8" />
+                            <local:UpmixSliders Compact="False" Visibility="{Binding UpmixEnabled, Converter={StaticResource Vis}}" />
+                            <TextBlock Style="{StaticResource CaptionText}" Margin="0,10,0,0"
+                                       Text="Changes apply while it plays. Sound that's already 5.1 (from apps that output it) isn't upmixed." />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
+
+        <!-- About -->
+        <TabItem Header="About">
+            <ScrollViewer Style="{StaticResource Page}">
+                <StackPanel>
+                    <Border Style="{StaticResource Section}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Image x:Name="AboutIcon" Width="48" Height="48" Margin="0,0,14,0" RenderOptions.BitmapScalingMode="HighQuality" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Surround Bridge" Style="{StaticResource TitleText}" />
+                                    <TextBlock x:Name="VersionText" Style="{StaticResource CaptionText}" />
+                                </StackPanel>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource BodyText}" Margin="0,12,0,0"
+                                       Text="Surround Bridge sends everything your PC plays to your amp as Dolby Digital or DTS surround, upmixing stereo to 5.1 on the way. It's a sister app of Surround Player." />
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Credits" Style="{StaticResource HeaderText}" />
+                    <Border Style="{StaticResource Section}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CaptionText}"
+                                       Text="Apps play into VB-Audio Virtual Cable, a free (donationware) virtual audio device by VB-Audio Software, installed with its own official installer. Surround Bridge isn't affiliated with VB-Audio." />
+                            <Button Style="{StaticResource Hyperlink}" Content="VB-Audio Virtual Cable website" Margin="0,6,0,0" Click="CableSite_Click" />
+                            <TextBlock Style="{StaticResource CaptionText}" Margin="0,12,0,0"
+                                       Text="Audio processing uses FFmpeg, under the LGPL. &quot;Dolby Digital&quot; and &quot;DTS&quot; are trademarks of their owners; Surround Bridge isn't affiliated with or licensed by them." />
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Uninstall" Style="{StaticResource HeaderText}" />
+                    <Border Style="{StaticResource Section}">
+                        <StackPanel>
+                            <TextBlock x:Name="UninstallNote" Style="{StaticResource CaptionText}" Margin="0,0,0,10"
+                                       Text="Removes Surround Bridge from this PC and puts Windows' sound output back. VB-Audio Virtual Cable stays installed (other apps may use it)." />
+                            <Button x:Name="UninstallButton" Content="Uninstall Surround Bridge…" Click="Uninstall_Click" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
+    </TabControl>
+</Window>
