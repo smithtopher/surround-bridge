@@ -31,7 +31,12 @@
   latency, "locked" indicator). Launch at login (SMAppService). Sleep/wake and HDMI hot-plug
   (TV input changes). Auto-switches the system output to the bridge device and back.
 
-## Windows
+## Windows ← started 2026-11-22
+- [x] CMake + clang-cl build of the core and `sbridge.exe`; `regress.sh` ALL PASSED on Windows 11.
+- [x] WASAPI capture back-end (`capture_wasapi.c`): capture endpoints and loopback of render
+      endpoints, with a silent render stream keeping loopback continuous.
+- [ ] Live test: VB-Cable → Dolby Digital → the Samsung over HDMI (silent media); drift, overruns.
+- [ ] Tray app; switch the default output to the cable while on, restore it after.
 - Same core. Capture: **WASAPI loopback** of a virtual endpoint. That endpoint needs a virtual audio
   driver, which on Windows is **kernel-mode** (Microsoft's SysVAD sample) and needs an EV certificate
   plus Microsoft attestation signing. Interim: use VB-Audio Cable as the virtual device.

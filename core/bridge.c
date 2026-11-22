@@ -114,7 +114,7 @@ static PCUpmix upmix_settings(SBBridge *b) {
 }
 
 int sb_list_inputs(PCDevice *out, int max) {
-#if defined(__APPLE__) && !defined(PC_STUB_BACKENDS)
+#if PC_HAVE_CAPTURE
     return pccap_list(out, max);
 #else
     (void)out; (void)max;
@@ -454,7 +454,7 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
     if (b->cfg.input_file) {
         if (open_input_file(b, b->cfg.input_file, err, errlen) < 0) goto fail;
     } else {
-#if defined(__APPLE__) && !defined(PC_STUB_BACKENDS)
+#if PC_HAVE_CAPTURE
         b->cap = pccap_open(b->cfg.input_uid, &b->capfmt, err, errlen);
         if (!b->cap) goto fail;
         b->in_ch = b->capfmt.channels > 8 ? 8 : b->capfmt.channels;
@@ -527,7 +527,7 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
         if (pc_thread_create(&b->feeder, feeder_thread, b) != 0) { snprintf(err, errlen, "Thread start failed"); goto fail; }
         b->have_feeder = 1;
     } else {
-#if defined(__APPLE__) && !defined(PC_STUB_BACKENDS)
+#if PC_HAVE_CAPTURE
         if (pccap_start(b->cap, on_capture, b) != 0) { snprintf(err, errlen, "Could not start capturing"); goto fail; }
 #endif
     }
@@ -546,7 +546,7 @@ void sb_bridge_wait(SBBridge *b) {
 void sb_bridge_stop(SBBridge *b) {
     atomic_store(&b->quit, 1);
     atomic_fetch_add(&b->out_serial, 1);       // unblocks a pending pc_out_write
-#if defined(__APPLE__) && !defined(PC_STUB_BACKENDS)
+#if PC_HAVE_CAPTURE
     if (b->cap) { pccap_close(b->cap); b->cap = NULL; }
 #endif
     sb_bridge_wait(b);

@@ -2,7 +2,8 @@
 //   sbridge devices
 //   sbridge run  [--input DEV] [--output DEV] [--dts] [--bitrate N] [--no-upmix] [--upmix-set k=v,...] [--seconds N]
 //   sbridge file <media> <out.spdif> [--realtime] [--dts] [--no-upmix] [--upmix-set k=v,...]
-// DEV: a device UID or part of its name ("BlackHole", "SAMSUNG").
+// DEV: a device UID or part of its name ("BlackHole", "SAMSUNG"; Windows: "CABLE Output", or
+// "loopback" devices: what plays on an output, e.g. "CABLE Input (loopback)").
 #include "bridge.h"
 #include "pc_platform.h"
 
@@ -12,6 +13,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <mmsystem.h>   // timeBeginPeriod
+#define DEFAULT_INPUT "CABLE Output"   // VB-Audio Virtual Cable's capture side
+#else
+#define DEFAULT_INPUT "BlackHole"
+#endif
 
 static volatile sig_atomic_t g_stop;
 static _Atomic int g_started;
@@ -84,7 +91,9 @@ int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: sbridge devices\n"
                         "       sbridge run  [--input DEV | --input-file F] [--output DEV] [--dts] [--bitrate N] [--no-upmix] [--upmix-set k=v,...]\n"
-                        "                    [--seconds N] [--buffer-ms N]   (--input-file: F at real time, e.g. silent media to test a device)\n"
+                        "                    [--seconds N] [--buffer-ms N] [--dump F]\n"
+                        "                    (--input-file: F at real time, e.g. silent media to test a device;\n"
+                        "                     --dump: write the IEC 61937 stream to F instead of a device, to test the capture side)\n"
                         "       sbridge file <media> <out.spdif> [--realtime] [--dts] [--no-upmix] [--upmix-set k=v,...]\n"
                         "DEV: a UID or part of the device name. Upmix keys: surround center width lfe xover move bass delay highcut\n");
         return 1;
@@ -98,7 +107,7 @@ int main(int argc, char **argv) {
     memset(&cfg, 0, sizeof(cfg));
     PCUpmix up = { .enabled = 1, .include_video = 1, .surround_db = -3, .center = 0.4f, .width = 0.55f, .lfe_db = -6,
                    .crossover_hz = 100, .lfe_move = 0, .bass_db = 0, .rear_delay_ms = 10, .rear_highcut_hz = 7000 };
-    const char *in_want = "BlackHole", *out_want = NULL;
+    const char *in_want = DEFAULT_INPUT, *out_want = NULL;
     double seconds = 0;
     int first = file ? 4 : 2;
     if (file) { cfg.input_file = argv[2]; cfg.dump_path = argv[3]; }
@@ -113,6 +122,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--realtime")) cfg.input_realtime = 1;
         else if (!strcmp(argv[i], "--input-file") && i + 1 < argc) { cfg.input_file = argv[++i]; cfg.input_realtime = 1; }
         else if (!strcmp(argv[i], "--buffer-ms") && i + 1 < argc) cfg.target_buffer_ms = atof(argv[++i]);
+        else if (!file && !strcmp(argv[i], "--dump") && i + 1 < argc) cfg.dump_path = argv[++i];   // live input, no device out
         else { fprintf(stderr, "unknown option %s\n", argv[i]); return 1; }
     }
     PCDevice ins[64], outs[64];
@@ -126,13 +136,26 @@ int main(int argc, char **argv) {
             cfg.output_uid = resolve(out_want, outs, no);
             if (!cfg.output_uid) { fprintf(stderr, "no output device matching '%s'\n", out_want); return 2; }
         }
+        // capturing the loopback of the output itself would feed the bitstream back into the input
+        const char *out_uid = cfg.output_uid;
+        for (int i = 0; !out_uid && i < no; i++) if (outs[i].is_default) out_uid = outs[i].uid;
+        const char *lb = "loopback:";
+        if (!cfg.dump_path && cfg.input_uid && out_uid && !strncmp(cfg.input_uid, lb, strlen(lb)) && !strcmp(cfg.input_uid + strlen(lb), out_uid)) {
+            fprintf(stderr, "the input is the loopback of the output device itself: pick another --output\n");
+            return 2;
+        }
     }
 
     SBBridge *b = sb_bridge_create();
     sb_bridge_set_upmix(b, &up);
     char err[512] = "";
+#ifdef _WIN32
+    timeBeginPeriod(1);   // pc_sleep_us granularity (the worker polls the input ring every 1 ms)
+    (void)permission_hint;
+#else
     pc_thread hint;
     if (!file && pc_thread_create(&hint, permission_hint, NULL) == 0) {}   // detached in effect: exits on its own
+#endif
     int rc = sb_bridge_start(b, &cfg, err, sizeof(err));
     atomic_store(&g_started, 1);
     if (rc != 0) { fprintf(stderr, "start failed: %s\n", err); return 3; }

@@ -65,6 +65,15 @@ copied for now (see [SHARED.md](SHARED.md)).
 - `scripts/make_installer.sh`: `build/SurroundBridge-<version>.pkg` (unsigned).
 - `scripts/regress.sh`: behavioural tests in file mode (nothing plays on any device).
 
+Windows 11 (work in progress: `sbridge.exe` only, no app yet):
+
+- Visual Studio 2022 Build Tools with the C++ workload and its clang-cl.
+- FFmpeg: `scripts/build_ffmpeg_win.ps1` (MSYS2 needed), or a Surround Player checkout next to this one.
+- `scripts/build_win.ps1` → `.build\win-release\sbridge.exe`. The virtual device for now is
+  [VB-Audio Virtual Cable](https://vb-audio.com/Cable/): set "CABLE Input" as the default output and run
+  `sbridge run --output "SAMSUNG"` (the input defaults to "CABLE Output"). Any output's loopback works
+  as the input too (`sbridge devices` lists them).
+
 ## Licence
 
 Not decided yet. FFmpeg is used under the LGPL. BlackHole isn't redistributed: its official binaries

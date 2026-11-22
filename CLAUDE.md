@@ -26,6 +26,26 @@ docs/PLAN.md the roadmap.
   The long-term fix is our own virtual device (PLAN.md phase 2).
 - Next: test the app live with the TV, the user runs the installer, lip sync check.
 
+## Windows port (started 2026-11-22)
+- **Built:** `scripts/build_win.ps1` (VS 2022 Build Tools: clang-cl 19 + CMake + Ninja, `CMakeLists.txt`)
+  → `.build\win-release\sbridge.exe`. FFmpeg: `vendor/ffmpeg/windows-x64`, else `..\music_player`'s
+  (same options). Clean build, no warnings.
+- **Tests:** `regress.sh` prints ALL PASSED on Windows 11 (MSYS2 UCRT64 ffmpeg/ffprobe/python on PATH:
+  `PATH=/c/msys64/ucrt64/bin:/c/msys64/usr/bin:$PATH bash scripts/regress.sh .build/win-release/sbridge.exe`).
+- **Capture:** `core/platform/windows/capture_wasapi.c`. Shared mode, the endpoint's float mix
+  format, polled every 3 ms on an MMCSS thread. Lists capture endpoints (uid = endpoint id), then
+  render endpoints as loopback (`loopback:<id>`, "<name> (loopback)"). Loopback only delivers packets
+  while something plays, so it also renders a **silent shared stream into the loopbacked endpoint**
+  to keep it running (verified: 4 s of loopback with nothing playing → 3.94 s of continuous AC3).
+  `bridge.c` uses `PC_HAVE_CAPTURE` (pc_capture.h) instead of `__APPLE__`.
+- `sbridge` on Windows: default input "CABLE Output" (VB-Audio Virtual Cable), `timeBeginPeriod(1)`,
+  refuses an input that is the loopback of the output itself (feedback). `run --dump F` writes the
+  live stream to a file instead of a device (tests capture without touching the TV).
+- **Not yet tested:** VB-Cable (not installed on this PC: the only endpoint is the Samsung over
+  NVIDIA HDMI, which offers AC3 bitstream), the live capture → exclusive HDMI path, drift control
+  against a real cable clock, hot-plug. Next: install VB-Cable, `sbridge run --output SAMSUNG` with
+  silent media playing into the cable; then a tray app (C#/WinUI like Surround Player, or Win32).
+
 ## App (macOS, 1.0.0)
 - `BridgeApp.swift`: `MenuBarExtra(.window)` + `Settings` scene, `LSUIElement`; AppDelegate handles
   SIGINT/SIGTERM and quit by calling `BridgeModel.shutdown()` (restores the Mac's output, releases the TV).
@@ -64,6 +84,8 @@ core/pc_output.*, pc_upmix.*, pc_audio_device.h, pc_platform.h, pc_types.h   sha
 tools/sbridge.c            CLI: devices / run / file
 scripts/build.sh           clang build -> build/<arch>/sbridge (FFmpeg: $FFMPEG_PREFIX, vendor/, or ../music_player/vendor/)
 scripts/regress.sh         file-mode behavioural tests (must print ALL PASSED)
+core/platform/windows/     capture_wasapi.c (new), audio_wasapi.c (shared, output)
+CMakeLists.txt, scripts/build_win.ps1, win_env.ps1   Windows build (clang-cl + Ninja) -> .build/win-<config>/sbridge.exe
 scripts/build_ffmpeg*.sh   same as Surround Player's (static 9.0.2, avfilter with only the needed filters)
 ```
 
