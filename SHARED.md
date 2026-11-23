@@ -30,6 +30,17 @@ library repo (git submodule) instead.
 - **2026-11-23, treble boost:** `PCUpmix.treble_db` (pc_types.h; it's the player's playercore.h
   struct) + pc_upmix.c (`bass@ut` low shelf −T and `fl_in`/`fr_in` +T = a high shelf). Not in Surround
   Player yet. Carrying it over needs the field in playercore.h **and** in both Windows apps' C#
-  mirrors of PCUpmix (`Native.cs`), or the struct sizes disagree.
+  mirrors of PCUpmix (`Native.cs`), or the struct sizes disagree. **Carried over 2026-11-23**
+  (Surround Player 1.4.0).
+
+## Fixes made in Surround Player first (to carry over)
+
+- **2026-11-23, tone without the upmix:** Surround Player's pc_upmix.c/.h add `pc_tone_create`
+  (the bass/treble shelves + limiter in any layout and format, no latency), `pc_tone_wanted`,
+  `pc_upmix_end` (EOF flush), and `pc_upmix_send` now takes `uint8_t *const *` (any format).
+  Its engine.c runs it for native multichannel and for stereo with the upmix off (`tone_deliver`:
+  created flat and ramped mid-stream, since a cold filter on a running signal clicks). The bridge
+  could do the same for native 5.1 input; its pc_upmix.c is otherwise identical (copy it back,
+  keeping `#include "pc_types.h"`, and update bridge.c's `pc_upmix_send` call).
 - **2026-11-23, pc_output.c:** `pc_out_gaps` (added by the Windows side) now also counts PCM
   underruns (`starved`, one per gap).
