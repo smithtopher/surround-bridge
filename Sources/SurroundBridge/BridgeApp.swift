@@ -43,7 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// Removes the app (and optionally BlackHole) with the standard administrator prompt, then quits.
+/// Removes the app and its audio device (and optionally BlackHole) with the standard administrator
+/// prompt, restarts macOS audio, then quits.
 enum Uninstaller {
     @MainActor static func run(removeBlackHole: Bool) {
         BridgeModel.shared.enabled = false
@@ -51,9 +52,9 @@ enum Uninstaller {
         try? SMAppServiceHelper.unregister()
         let app = Bundle.main.bundlePath
         var cmd = "rm -rf '\(app.replacingOccurrences(of: "'", with: "'\\''"))'"
-        if removeBlackHole {
-            cmd += " && rm -rf /Library/Audio/Plug-Ins/HAL/BlackHole2ch.driver && launchctl kickstart -k system/com.apple.audio.coreaudiod"
-        }
+        cmd += " && rm -rf \(BlackHoleSetup.ownDriverPath)"
+        if removeBlackHole { cmd += " && rm -rf \(BlackHoleSetup.driverPath)" }
+        cmd += " && launchctl kickstart -k system/com.apple.audio.coreaudiod"
         let script = "do shell script \"\(cmd.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\" with administrator privileges"
         var error: NSDictionary?
         NSAppleScript(source: script)?.executeAndReturnError(&error)

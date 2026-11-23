@@ -26,7 +26,7 @@ final class BridgeModel: ObservableObject {
     enum State: Equatable {
         case off, starting, running
         case needsPermission          // microphone access denied
-        case noVirtualDevice          // BlackHole not installed
+        case noVirtualDevice          // neither our device nor BlackHole is there
         case noOutput                 // the chosen HDMI/optical device isn't connected
         case failed(String)
     }
@@ -143,7 +143,10 @@ final class BridgeModel: ObservableObject {
             .map { OutputDevice(uid: cString($0.uid), name: cString($0.name), isHDMI: $0.is_hdmi != 0) }
         var ins = [PCDevice](repeating: PCDevice(), count: 64)
         let ni = Int(sb_list_inputs(&ins, 64))
-        virtualDeviceUID = ins.prefix(ni).first { cString($0.name).localizedCaseInsensitiveContains("BlackHole") }.map { cString($0.uid) }
+        // our own device (installed by the .pkg), else BlackHole 2ch (the fallback, see BlackHoleSetup)
+        let uids = ins.prefix(ni).map { (uid: cString($0.uid), name: cString($0.name)) }
+        virtualDeviceUID = uids.first { $0.uid == BlackHoleSetup.ownDeviceUID }?.uid
+            ?? uids.first { $0.name.localizedCaseInsensitiveContains("BlackHole") }?.uid
         // first run: pick the only (or first) digital output
         if outputUID.isEmpty, let first = outputs.first { outputUID = first.uid }
     }

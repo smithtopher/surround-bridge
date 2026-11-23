@@ -2,8 +2,9 @@
 //   sbridge devices
 //   sbridge run  [--input DEV] [--output DEV] [--dts] [--bitrate N] [--no-upmix] [--upmix-set k=v,...] [--seconds N]
 //   sbridge file <media> <out.spdif> [--realtime] [--dts] [--no-upmix] [--upmix-set k=v,...]
-// DEV: a device UID or part of its name ("BlackHole", "SAMSUNG"; Windows: "CABLE Output", or
-// "loopback" devices: what plays on an output, e.g. "CABLE Input (loopback)").
+// DEV: a device UID or part of its name ("SAMSUNG"; Windows: "CABLE Output", or "loopback" devices:
+// what plays on an output, e.g. "CABLE Input (loopback)"). The default input on macOS is the
+// Surround Bridge device (SurroundBridge_UID), else BlackHole; on Windows "CABLE Output".
 #include "bridge.h"
 #include "pc_platform.h"
 
@@ -18,6 +19,7 @@
 #define DEFAULT_INPUT "CABLE Output"   // VB-Audio Virtual Cable's capture side
 #else
 #define DEFAULT_INPUT "BlackHole"
+#define OWN_INPUT "SurroundBridge_UID"   // our device (driver/), installed by the .pkg
 #endif
 
 static volatile sig_atomic_t g_stop;
@@ -107,7 +109,7 @@ int main(int argc, char **argv) {
     memset(&cfg, 0, sizeof(cfg));
     PCUpmix up = { .enabled = 1, .include_video = 1, .surround_db = -3, .center = 0.4f, .width = 0.55f, .lfe_db = -6,
                    .crossover_hz = 100, .lfe_move = 0, .bass_db = 0, .rear_delay_ms = 10, .rear_highcut_hz = 7000 };
-    const char *in_want = DEFAULT_INPUT, *out_want = NULL;
+    const char *in_want = NULL, *out_want = NULL;   // NULL: OWN_INPUT if present, else DEFAULT_INPUT
     double seconds = 0;
     int first = file ? 4 : 2;
     if (file) { cfg.input_file = argv[2]; cfg.dump_path = argv[3]; }
@@ -129,8 +131,14 @@ int main(int argc, char **argv) {
     if (!file) {
         int ni = sb_list_inputs(ins, 64), no = sb_list_outputs(outs, 64);
         if (!cfg.input_file) {   // --input-file: a file at real time stands in for the virtual device
-            cfg.input_uid = resolve(in_want, ins, ni);
-            if (!cfg.input_uid) { fprintf(stderr, "no input device matching '%s' (see: sbridge devices)\n", in_want); return 2; }
+            if (in_want) cfg.input_uid = resolve(in_want, ins, ni);
+            else {
+#ifdef OWN_INPUT
+                cfg.input_uid = resolve(OWN_INPUT, ins, ni);
+#endif
+                if (!cfg.input_uid) cfg.input_uid = resolve(DEFAULT_INPUT, ins, ni);
+            }
+            if (!cfg.input_uid) { fprintf(stderr, "no input device matching '%s' (see: sbridge devices)\n", in_want ? in_want : DEFAULT_INPUT); return 2; }
         }
         if (out_want) {
             cfg.output_uid = resolve(out_want, outs, no);

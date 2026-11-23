@@ -17,14 +17,19 @@ docs/PLAN.md the roadmap.
   `sbridge`, the app's own grant for the app: `NSMicrophoneUsageDescription`). Without it
   `AudioDeviceCreateIOProcID` blocks forever; the app checks `AVCaptureDevice.authorizationStatus`
   first and `sbridge` prints a hint after 3 s.
-- **BlackHole can't be bundled:** its LICENSE header says the source is GPL-3 but "Official compiled
-  BlackHole binaries and installers … All rights reserved", and the name/branding need written
-  permission for third-party distributions. So the app downloads the official installer
-  (`BlackHoleSetup.swift`: existential.audio URL, sha256 pin of 0.7.1 or Existential Audio's Developer
-  ID + notarization via `pkgutil --check-signature`), opens it, polls for the driver, then offers
-  "Restart macOS Audio" (`launchctl kickstart -k system/com.apple.audio.coreaudiod`, admin prompt).
-  The long-term fix is our own virtual device (PLAN.md phase 2).
-- Next: test the app live with the TV, the user runs the installer, lip sync check.
+- **Our own virtual device (1.1.0, 2026-11-23):** `driver/` = BlackHole 0.7.1's `BlackHole.c` (GPL-3)
+  built under our name by `scripts/build_driver.sh` (clang only, universal, ad-hoc signed; build
+  definitions for name/UIDs/bundle ID, 2 ch, 48 kHz only; three branding strings in the source switched
+  to the macros, marked "Surround Bridge:"; details in driver/README.md). Device "Surround Bridge",
+  UID `SurroundBridge_UID`, bundle `local.surroundbridge.driver` in `/Library/Audio/Plug-Ins/HAL`.
+  The .pkg installs it first (`installer/driver-scripts/postinstall`: permissions + kickstart
+  coreaudiod), then the app. **Never use BlackHole's name/branding or its official binaries** (their
+  LICENSE header: binaries/installers "All rights reserved", branding needs permission); building
+  from source under our own name is what the GPL allows. Verified 2026-11-23: coreaudiod loads the
+  ad-hoc build, and a 440/660 Hz tone played into it came out of `sbridge run --dump` exact (L/R).
+  Fallback when it's missing: `BlackHoleSetup.swift` downloads the official BlackHole installer
+  (sha256 pin / Existential Audio Developer ID), "Use BlackHole 2ch instead…" in the popover.
+- Next: test the app live with the TV (on our device), lip sync check.
 
 ## Windows port (started 2026-11-22)
 - **Built:** `scripts/build_win.ps1` (VS 2022 Build Tools: clang-cl 19 + CMake + Ninja, `CMakeLists.txt`)
@@ -81,11 +86,12 @@ docs/PLAN.md the roadmap.
 ## App (macOS, 1.0.0)
 - `BridgeApp.swift`: `MenuBarExtra(.window)` + `Settings` scene, `LSUIElement`; AppDelegate handles
   SIGINT/SIGTERM and quit by calling `BridgeModel.shutdown()` (restores the Mac's output, releases the TV).
-  `Uninstaller` (About tab) removes the app (and optionally BlackHole) with an admin prompt.
+  `Uninstaller` (About tab) removes the app and SurroundBridge.driver (and optionally BlackHole, only
+  offered when it's installed) with an admin prompt, then restarts coreaudiod.
 - `BridgeModel.swift`: the only caller of the C API, always on a serial queue (start can take ~1–2 s
   while the TV switches format). States: off / starting / running / needsPermission /
   noVirtualDevice / noOutput / failed. While on it sets the default output **and** the alerts
-  output to BlackHole (`AudioSystem.swift`), saving the previous ones under `restoreOutputUID` /
+  output to the virtual device (`AudioSystem.swift`; `SurroundBridge_UID`, else a device named BlackHole), saving the previous ones under `restoreOutputUID` /
   `restoreSystemOutputUID` (also restored at launch after a crash). Restarts when the chosen output
   re-appears (matched by name: the TV's UID changes), on wake, and when the pipeline stops by itself.
 - `Upmix.swift` is Surround Player's (same keys and presets, SHARED.md); the bridge defaults to Music.
@@ -108,6 +114,7 @@ docs/PLAN.md the roadmap.
 ```
 core/bridge.c, include/bridge.h   PORTABLE live pipeline + public API (sb_*); include/pc_types.h shared types
 Sources/SurroundBridge/    the menu-bar app (SwiftUI; see "App" above)
+driver/                    the Mac virtual device: BlackHole 0.7.1 source (GPL-3) + our Info.plist; scripts/build_driver.sh
 Package.swift              SwiftPM: BridgeCore (C, core/), SurroundBridge (app), sbridge (CLI)
 core/pc_encode.c/.h        PORTABLE AC3/DTS encoder + IEC 61937 packer (planar AC3, packed s32 DTS)
 core/pc_capture.h          capture back-end interface (pccap_*)
@@ -152,7 +159,8 @@ scripts/build_ffmpeg*.sh   same as Surround Player's (static 9.0.2, avfilter wit
 ## Testing — IMPORTANT
 - **Never play audible test signals on a real device.** The TV is often the default output. Use silent
   media (`anullsrc`) for anything that reaches a device. Tones are fine in file mode (`sbridge file`)
-  and into BlackHole *only when the bridge's output is a dump*, since BlackHole itself is inaudible.
+  and into the virtual device (Surround Bridge / BlackHole) *only when the bridge's output is a dump*
+  (`sbridge run --dump F`), since the virtual device itself is inaudible.
 - **Never touch the user's real data** (Surround Player's playlist session / `local.surroundplayer`
   defaults, or this app's `local.surroundbridge` settings: test with `SURROUND_BRIDGE_DEFAULTS`). The app
   switches the Mac's default output: record it before a test and check it's restored after. Back up and restore, never delete. A previous test cleanup

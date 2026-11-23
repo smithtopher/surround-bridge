@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.0] — 2026-11-23 (macOS)
+
+- **Its own audio device:** the installer now adds the **Surround Bridge** audio device (2 channels,
+  48 kHz) that your apps play into, so there's nothing else to download or install. It's built from
+  the source code of BlackHole 0.7.1 (GPL-3; not an official BlackHole build) and installs alongside
+  an existing BlackHole.
+- If the device is missing, the menu offers to restart macOS audio, or to use BlackHole 2ch instead.
+- Uninstall also removes the device.
+
 ## [Windows 1.0.0] — 2026-11-22
 
 First Windows release: everything your PC plays, sent to your amp as Dolby Digital or DTS surround.

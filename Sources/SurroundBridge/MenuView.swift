@@ -77,23 +77,31 @@ struct MenuView: View {
     }
 }
 
-/// One-time setup of the virtual audio device apps play into: BlackHole 2ch, from its official
+/// The virtual audio device apps play into is missing: our own one is installed by the .pkg (macOS
+/// audio may just need a restart to load it); the fallback is BlackHole 2ch from its official
 /// installer (see BlackHoleSetup).
 struct VirtualDeviceSetup: View {
     @ObservedObject private var setup = BlackHoleSetup.shared
 
     var body: some View {
         switch setup.phase {
+        case .idle where BlackHoleSetup.ownDriverInstalled:
+            Notice(text: "The Surround Bridge audio device is installed, but macOS audio hasn't loaded it yet. Restarting it takes a second (sound stops briefly).",
+                   button: "Restart macOS Audio") { setup.restartAudio() }
         case .idle:
-            Notice(text: "One more thing: Surround Bridge needs BlackHole 2ch, a free virtual audio device that your apps play into. Its official installer will open; it takes a minute.",
-                   button: "Install BlackHole…") { setup.install() }
+            VStack(alignment: .leading, spacing: 6) {
+                Notice(text: "The Surround Bridge audio device, which your apps play into, is missing. Run the Surround Bridge installer again to add it.",
+                       button: nil, action: {})
+                Button("Use BlackHole 2ch instead…") { setup.install() }.controlSize(.small)
+                    .help("Downloads BlackHole 2ch, a free virtual audio device by Existential Audio, and opens its official installer")
+            }
         case .downloading:
             HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Downloading BlackHole's installer…").font(.caption) }
         case .installerOpen:
             Notice(text: "Finish BlackHole's installer (it asks for your password). Surround Bridge notices when it's done.",
                    button: nil, action: {})
         case .needsAudioRestart:
-            Notice(text: "BlackHole is installed. macOS needs to restart its audio once to see it (sound stops for a second).",
+            Notice(text: "The audio device is installed. macOS needs to restart its audio once to see it (sound stops for a second).",
                    button: "Restart macOS Audio") { setup.restartAudio() }
         case .failed(let why):
             Notice(text: "\(why) You can also download BlackHole 2ch from its website.", button: "Open BlackHole Website") { setup.openWebsite() }

@@ -1,0 +1,12 @@
+#!/bin/sh
+# Runs as root after SurroundBridge.driver is installed: fix its ownership and permissions, then
+# restart macOS audio (coreaudiod) so the "Surround Bridge" device appears without a reboot.
+D=/Library/Audio/Plug-Ins/HAL/SurroundBridge.driver
+chown -R root:wheel "$D"
+find "$D" -type d -exec chmod 755 {} \;
+find "$D" -type f -exec chmod 644 {} \;
+chmod 755 "$D/Contents/MacOS/SurroundBridge"
+/bin/launchctl kickstart -k system/com.apple.audio.coreaudiod || /usr/bin/killall coreaudiod || true
+# give it a moment to load the plug-in before the app is opened
+sleep 2
+exit 0

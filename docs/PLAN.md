@@ -12,8 +12,9 @@
 - [ ] Protected (DRM) content: does it play into a virtual device at all?
 
 ## Phase 2: our own virtual device (macOS)
-- Audio Server plug-in ("Surround Bridge"), based on Apple's NullAudio sample (permissive licence;
-  BlackHole is GPL, reference only).
+- [x] Audio Server plug-in ("Surround Bridge"): BlackHole 0.7.1's source built under our name (GPL-3,
+  `driver/`), installed by the .pkg (1.1.0, 2026-11-23). An own plug-in from Apple's NullAudio sample
+  (permissive) stays an option if the app needs a non-GPL licence later.
 - Reports its **latency** (`kAudioDevicePropertyLatency` / safety offset) so AVFoundation-based players
   delay their video to match.
 - Hand audio to the agent over **shared memory**, not an input stream: reading an input needs microphone
@@ -24,7 +25,7 @@
 
 ## Phase 3: menu-bar app (macOS) ← 1.0.0 built (2026-11-21)
 - [x] Menu-bar app: on/off, status, levels, upmix presets + sliders, Settings (output, format, login, upmix, about/uninstall).
-- [x] Installer pkg (app only; BlackHole downloaded from its official site by the app, it can't be bundled).
+- [x] Installer pkg (app + our virtual device since 1.1.0; BlackHole's official installer is only a fallback).
 - [ ] Live test of the app with the TV; the user runs the installer.
 - [ ] Developer ID signing + notarization (needs the $99 Apple Developer account).
 - On/off, mode (the upmix presets shared with Surround Player), output device, status (levels,

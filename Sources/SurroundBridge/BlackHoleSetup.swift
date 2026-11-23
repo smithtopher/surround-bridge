@@ -1,8 +1,9 @@
-// Getting the virtual audio device. Surround Bridge doesn't redistribute BlackHole (its official
-// binaries and installers are "All rights reserved" by Existential Audio Inc.; only the source is
-// GPL-3), so the app downloads the official installer from existential.audio, checks that it's
-// signed by Existential Audio's Developer ID, and opens it: the user installs it with BlackHole's
-// own installer and licence.
+// The virtual audio device. Normally it's our own "Surround Bridge" device (SurroundBridge.driver,
+// built from BlackHole's GPL-3 source, see driver/README.md), which the .pkg installs. If it's
+// missing (e.g. the app was copied without the installer), the fallback is real BlackHole 2ch:
+// Surround Bridge doesn't redistribute that (its official binaries and installers are "All rights
+// reserved" by Existential Audio Inc.), so the app downloads the official installer from
+// existential.audio, checks that it's signed by Existential Audio's Developer ID, and opens it.
 import AppKit
 import CryptoKit
 import Foundation
@@ -27,8 +28,12 @@ final class BlackHoleSetup: ObservableObject {
     nonisolated static let knownSHA256 = "57b540f27a3e29c37e310e01bee0fdfab76733087e47f997ef9dccf851400dcf"
     nonisolated static let signer = "Developer ID Installer: Existential Audio Inc. (Q5C99V536K)"
     static let driverPath = "/Library/Audio/Plug-Ins/HAL/BlackHole2ch.driver"
+    static let ownDriverPath = "/Library/Audio/Plug-Ins/HAL/SurroundBridge.driver"
+    static let ownDeviceUID = "SurroundBridge_UID"
 
     static var driverInstalled: Bool { FileManager.default.fileExists(atPath: driverPath) }
+    /// Our driver is on disk (but macOS audio may not have loaded it yet).
+    static var ownDriverInstalled: Bool { FileManager.default.fileExists(atPath: ownDriverPath) }
 
     private var poll: Timer?
 
@@ -69,7 +74,7 @@ final class BlackHoleSetup: ObservableObject {
     }
 
     private func checkInstalled() {
-        guard Self.driverInstalled else { return }
+        guard Self.driverInstalled || Self.ownDriverInstalled else { return }
         poll?.invalidate()
         poll = nil
         // the driver is on disk; macOS audio picks it up after it restarts (BlackHole's installer

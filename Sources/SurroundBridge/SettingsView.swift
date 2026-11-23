@@ -183,12 +183,14 @@ struct AboutView: View {
                 note("Surround Bridge sends everything your Mac plays to your amp as Dolby Digital or DTS surround, upmixing stereo to 5.1 on the way. It's a sister app of Surround Player.")
             }
             Section {
-                note("Apps play into BlackHole 2ch, a free virtual audio device by Existential Audio Inc., installed with its own official installer. Surround Bridge isn't affiliated with Existential Audio.")
-                Link("BlackHole website", destination: URL(string: "https://existential.audio/blackhole/")!)
+                note("Apps play into the Surround Bridge audio device, built from the source code of BlackHole by Existential Audio Inc. under the GNU GPL v3. It isn't an official BlackHole build, and Existential Audio doesn't make or support it.")
+                Link("BlackHole source code (GPL-3)", destination: URL(string: "https://github.com/ExistentialAudio/BlackHole")!)
                 note("Audio processing uses FFmpeg, under the LGPL. \"Dolby Digital\" and \"DTS\" are trademarks of their owners; Surround Bridge isn't affiliated with or licensed by them.")
             } header: { Text("Credits") }
             Section {
-                Toggle("Also remove BlackHole (other apps may use it)", isOn: $removeBlackHole)
+                if BlackHoleSetup.driverInstalled {
+                    Toggle("Also remove BlackHole 2ch (other apps may use it)", isOn: $removeBlackHole)
+                }
                 Button("Uninstall Surround Bridge…") { confirmUninstall = true }
             } header: { Text("Uninstall") }
         }
@@ -196,7 +198,7 @@ struct AboutView: View {
         .confirmationDialog("Uninstall Surround Bridge?", isPresented: $confirmUninstall) {
             Button("Uninstall", role: .destructive) { Uninstaller.run(removeBlackHole: removeBlackHole) }
         } message: {
-            Text(removeBlackHole ? "Removes the app and BlackHole. macOS asks for your password." : "Removes the app. macOS asks for your password.")
+            Text(removeBlackHole ? "Removes the app, its audio device and BlackHole 2ch. macOS asks for your password." : "Removes the app and its audio device. macOS asks for your password.")
         }
     }
 }

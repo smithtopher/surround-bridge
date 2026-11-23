@@ -10,10 +10,15 @@
         <allowed-os-versions><os-version min="14.0"/></allowed-os-versions>
     </volume-check>
     <choices-outline>
+        <line choice="local.surroundbridge.driver"/>
         <line choice="local.surroundbridge.app"/>
     </choices-outline>
+    <choice id="local.surroundbridge.driver" visible="false" title="Surround Bridge audio device">
+        <pkg-ref id="local.surroundbridge.driver"/>
+    </choice>
     <choice id="local.surroundbridge.app" visible="false" title="Surround Bridge">
         <pkg-ref id="local.surroundbridge.app"/>
     </choice>
+    <pkg-ref id="local.surroundbridge.driver" version="@VERSION@" onConclusion="none">SurroundBridge-driver.pkg</pkg-ref>
     <pkg-ref id="local.surroundbridge.app" version="@VERSION@" onConclusion="none">SurroundBridge-app.pkg</pkg-ref>
 </installer-gui-script>

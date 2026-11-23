@@ -13,14 +13,13 @@ Downloads are on the [`releases` branch](https://github.com/smithtopher/surround
 
 ## Install (macOS 14+)
 
-1. Open **SurroundBridge-1.0.0.pkg**. It isn't signed by a registered developer yet, so the first
+1. Open **SurroundBridge-1.1.0.pkg**. It isn't signed by a registered developer yet, so the first
    time: right-click it in Finder → **Open** → **Open**.
-2. The installer puts **Surround Bridge** in Applications and starts it. It lives in the menu bar
-   (speaker icon, top right).
-3. Click the icon and switch it on. The first time it walks you through:
-   - **installing BlackHole 2ch**, the free virtual audio device your apps play into (downloaded from
-     existential.audio and installed with its official installer), then restarting macOS audio once;
-   - **allowing access** to it (macOS treats listening to an audio device like a microphone).
+2. The installer puts **Surround Bridge** in Applications, adds the **Surround Bridge audio device**
+   (the virtual output your apps play into; macOS audio restarts once for it) and starts the app. It
+   lives in the menu bar (speaker icon, top right).
+3. Click the icon and switch it on. The first time, **allow access** to the audio device (macOS
+   treats listening to an audio device like a microphone).
 4. Pick your TV, receiver or soundbar under Settings ▸ General if it isn't already chosen.
 
 While it's on, the Mac's sound output points at the bridge, and everything plays through your amp
@@ -31,7 +30,7 @@ presets and sliders as Surround Player (Music, Movies & TV, Wide, Custom; surrou
 focus, width, subwoofer; Advanced: crossover, bass routing, bass boost, rear delay, rear high-cut).
 They apply while it plays.
 
-**Uninstall:** Settings ▸ About ▸ Uninstall (optionally removes BlackHole too).
+**Uninstall:** Settings ▸ About ▸ Uninstall (removes the app and its audio device).
 
 ## Install (Windows 10/11, 64-bit)
 
@@ -60,7 +59,7 @@ Bridge. VB-Audio Virtual Cable stays (remove it with its own setup's "Remove Dri
 
 ```sh
 build/arm64/sbridge devices
-build/arm64/sbridge run --input BlackHole --output "SAMSUNG"
+build/arm64/sbridge run --output "SAMSUNG"      # input: the Surround Bridge device, else BlackHole
 ```
 
 Options: `--dts`, `--bitrate N`, `--no-upmix`, `--upmix-set surround=-3,center=0.5,width=0.6,lfe=-6,xover=100,move=0,bass=0,delay=10,highcut=7000`,
@@ -102,9 +101,12 @@ Windows (the same repository and `main` branch; the C core is shared):
 
 ## Licence
 
-Not decided yet. FFmpeg is used under the LGPL. BlackHole isn't redistributed: its official binaries
-are "All rights reserved" by Existential Audio Inc. (only its source code is GPL-3), so the app
-downloads the official installer instead. VB-Audio Virtual Cable is donationware whose licence
+Not decided yet for the app. FFmpeg is used under the LGPL. The Mac's virtual audio device
+(`driver/`) is built from the source code of [BlackHole](https://github.com/ExistentialAudio/BlackHole)
+0.7.1 by Existential Audio Inc. and is under the **GPL-3** like its source; see
+[driver/README.md](driver/README.md) for what was changed. It's not an official BlackHole build and
+doesn't use BlackHole's name or branding. The app is a separate program that uses the device through
+CoreAudio. VB-Audio Virtual Cable is donationware whose licence
 doesn't allow bundling, so the Windows app likewise downloads VB-Audio's official package. "Dolby
 Digital" and "DTS" are trademarks of their owners; this project isn't affiliated with or licensed by
 them, or by Existential Audio or VB-Audio.
