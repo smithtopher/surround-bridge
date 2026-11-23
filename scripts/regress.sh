@@ -94,5 +94,80 @@ run "$W/left.flac" "$W/rt.spdif" --realtime && {
     "$PY" -c "import sys; sys.exit(0 if 5.8 < float(sys.argv[1]) < 7.0 else 1)" "$dt" && pass "6 s file took $dt s" || fail "6 s file took $dt s"
 }
 
+cat > "$W/rawfreqs.py" <<'EOF'
+# f32le file with N channels: frames, then the zero-crossing frequency of each channel (s 1..4)
+import sys
+from array import array
+a = array('f'); a.frombytes(open(sys.argv[1], 'rb').read()); ch = int(sys.argv[2]); rate = 48000
+n = len(a) // ch; seg = a[rate * ch: 4 * rate * ch]; m = len(seg) // ch
+fr = []
+for c in range(ch):
+    x = seg[c::ch]; peak = max(abs(v) for v in x)
+    fr.append('-' if peak < 1e-4 else str(round(sum(1 for i in range(1, m) if (x[i-1] < 0) != (x[i] < 0)) / 2 / (m / rate), -1)))
+print(n, ' '.join(fr))
+EOF
+cat > "$W/tone.py" <<'EOF'
+# level (dB) at given frequencies summed over the front channels (FL FR FC) of a 6-ch f32le dump
+import sys, math
+from array import array
+a = array('f'); a.frombytes(open(sys.argv[1], 'rb').read()); ch = 6; rate = 48000
+seg = a[2 * rate * ch: 4 * rate * ch]; m = len(seg) // ch
+out = []
+for f in map(float, sys.argv[2:]):
+    w = 2 * math.pi * f / rate; e = 0.0
+    for c in (0, 1, 2):
+        x = seg[c::ch]
+        re = math.fsum(x[i] * math.cos(w * i) for i in range(m)); im = math.fsum(x[i] * math.sin(w * i) for i in range(m))
+        e += (re * re + im * im) / (m * m)
+    out.append('%.2f' % (10 * math.log10(e) if e > 0 else -150))
+print(' '.join(out))
+EOF
+
+echo "multichannel PCM (--pcm: no encoding, the device's layout)"
+run "$W/centre.flac" "$W/pc.raw" --pcm && {
+    r=$("$PY" -I "$W/levels.py" "$W/pc.raw" centre)
+    case "$r" in ok*) pass "pcm upmix centred: ${r#ok }";; *) fail "pcm upmix centred: ${r#BAD }";; esac
+}
+run "$W/left.flac" "$W/pl.raw" --pcm && {
+    r=$("$PY" -I "$W/levels.py" "$W/pl.raw" left)
+    case "$r" in ok*) pass "pcm upmix hard left: ${r#ok }";; *) fail "pcm upmix hard left: ${r#BAD }";; esac
+}
+run "$W/anti.flac" "$W/pa.raw" --pcm && {
+    r=$("$PY" -I "$W/levels.py" "$W/pa.raw" anti)
+    case "$r" in ok*) pass "pcm upmix ambience: ${r#ok }";; *) fail "pcm upmix ambience: ${r#BAD }";; esac
+}
+run "$W/six.flac" "$W/p6.raw" --pcm && {
+    r=$("$PY" -I "$W/rawfreqs.py" "$W/p6.raw" 6)
+    [ "${r#* }" = "300.0 500.0 700.0 60.0 1100.0 1300.0" ] && pass "pcm 5.1 input: channels in place (${r#* })" || fail "pcm 5.1 input: '$r'"
+    "$PY" -c "import sys; sys.exit(0 if abs(int(sys.argv[1]) - 288000) <= 1536 else 1)" "${r%% *}" \
+        && pass "pcm 5.1 input: ${r%% *} frames (6 s at 48 kHz)" || fail "pcm 5.1 input: ${r%% *} frames, want ~288000"
+}
+gen "0.25*sin(2*PI*440*t)|0.25*sin(2*PI*660*t)" lr 48000
+run "$W/lr.flac" "$W/p2.raw" --pcm --no-upmix && {
+    r=$("$PY" -I "$W/rawfreqs.py" "$W/p2.raw" 2)
+    [ "${r#* }" = "440.0 660.0" ] && pass "pcm upmix off: stereo, L/R in place (${r#* })" || fail "pcm upmix off: '$r'"
+}
+
+echo "tone: bass and treble shelves (front channels, PCM so no codec in the way)"
+gen "0.1*sin(2*PI*60*t)+0.1*sin(2*PI*1000*t)+0.1*sin(2*PI*12000*t)|0.1*sin(2*PI*60*t)+0.1*sin(2*PI*1000*t)+0.1*sin(2*PI*12000*t)" tones 48000
+run "$W/tones.flac" "$W/t0.raw" --pcm --upmix-set lfe=-40 && t0=$("$PY" -I "$W/tone.py" "$W/t0.raw" 60 1000 12000)
+run "$W/tones.flac" "$W/tt.raw" --pcm --upmix-set lfe=-40,treble=6 && tt=$("$PY" -I "$W/tone.py" "$W/tt.raw" 60 1000 12000)
+run "$W/tones.flac" "$W/tb.raw" --pcm --upmix-set lfe=-40,bass=6 && tb=$("$PY" -I "$W/tone.py" "$W/tb.raw" 60 1000 12000)
+run "$W/tones.flac" "$W/tl.raw" --pcm --upmix-set lfe=-40,bass=9,treble=9 && tl=$("$PY" -I "$W/tone.py" "$W/tl.raw" 60 1000 12000)
+tonecheck() { # name "levels" lo,hi per frequency (dB change from no boost)
+    local r; r=$("$PY" -c '
+import sys
+b = [float(v) for v in sys.argv[1].split()]; x = [float(v) for v in sys.argv[2].split()]
+d = [xi - bi for xi, bi in zip(x, b)]
+ok = all(lo <= di <= hi for di, (lo, hi) in zip(d, [tuple(map(float, r.split(","))) for r in sys.argv[3:]]))
+print(("ok " if ok else "BAD ") + "60 Hz %+.1f, 1 kHz %+.1f, 12 kHz %+.1f dB" % tuple(d))' "$t0" "$2" $3)
+    case "$r" in ok*) pass "$1: ${r#ok }";; *) fail "$1: ${r#BAD }";; esac
+}
+[ -n "${t0:-}" ] && {
+    [ -n "${tt:-}" ] && tonecheck "treble +6 dB" "$tt" "-0.7,0.7 -0.7,0.9 5.0,6.8"
+    [ -n "${tb:-}" ] && tonecheck "bass +6 dB" "$tb" "5.0,6.8 -0.7,0.7 -0.7,0.7"
+    [ -n "${tl:-}" ] && tonecheck "loudness (bass +9, treble +9)" "$tl" "8.0,10.0 -1.0,1.0 8.0,10.0"
+}
+
 [ $FAIL = 0 ] && echo "ALL PASSED" || echo "SOME CHECKS FAILED"
 exit $FAIL

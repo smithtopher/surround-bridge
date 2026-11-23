@@ -27,3 +27,9 @@ library repo (git submodule) instead.
   must be encoded as 5.1(side); the graph's aformat stage maps back → side with levels intact.
   Fixed in Surround Player too (engine.c `setup_audio`, after its 1.3.0 release, plus a regress check).
 - `pc_encode.c` is new. Surround Player could replace its inline encoder/packer with it.
+- **2026-11-23, treble boost:** `PCUpmix.treble_db` (pc_types.h; it's the player's playercore.h
+  struct) + pc_upmix.c (`bass@ut` low shelf −T and `fl_in`/`fr_in` +T = a high shelf). Not in Surround
+  Player yet. Carrying it over needs the field in playercore.h **and** in both Windows apps' C#
+  mirrors of PCUpmix (`Native.cs`), or the struct sizes disagree.
+- **2026-11-23, pc_output.c:** `pc_out_gaps` (added by the Windows side) now also counts PCM
+  underruns (`starved`, one per gap).

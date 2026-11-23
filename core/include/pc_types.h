@@ -50,6 +50,8 @@ typedef struct {
     float bass_db;          // 0..12 dB low-shelf bass boost (100 Hz)
     float rear_delay_ms;    // 0..30: rears slightly late keeps sounds anchored at the front
     int rear_highcut_hz;    // 0 = off, else 2000..20000: rolls treble off the rears
+    float treble_db;        // 0..12 dB high-shelf treble boost (6 kHz); with bass_db, a loudness
+                            // curve for low-volume listening (Surround Bridge first, see SHARED.md)
 } PCUpmix;
 
 #endif

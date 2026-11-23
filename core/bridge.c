@@ -1,4 +1,7 @@
 // PORTABLE: the live pipeline (see bridge.h). FFmpeg + the shared output/upmix/encode layers.
+// Bitstream: the converted audio (b->fmt = the encoder's format, b->enc_layout) collects in the
+// fifo and leaves as whole encoder frames -> IEC 61937 bursts. PCM (b->pcm): b->fmt is packed
+// float in the device's layout, and the fifo is written to the output as it fills.
 #include "bridge.h"
 #include "pc_capture.h"
 #include "pc_encode.h"
@@ -52,7 +55,10 @@ struct SBBridge {
 
     // worker only
     PCOut *out;
-    PCEncoder *enc;
+    PCEncoder *enc;                      // NULL in PCM mode
+    int pcm;                             // SB_CODEC_PCM: multichannel PCM, no encoder
+    long long pcm_gaps;                  // PCM underruns already refilled (worker only)
+    enum AVSampleFormat fmt;             // what the converter / upmix graph / fifo hold
     SwrContext *swr;
     PCUpmixer *um;
     int um_gen, upmixing;
@@ -249,7 +255,23 @@ static void *feeder_thread(void *arg) {
 // ---------------------------------------------------------------------------
 // worker: ring -> resample -> [upmix] -> encode -> IEC 61937 -> output
 
+// PCM: everything in the fifo, as packed float frames in the device's layout.
+static int send_pcm(SBBridge *b, int serial) {
+    int n = av_audio_fifo_size(b->fifo);
+    if (n <= 0) return 0;
+    int ch = b->enc_layout.nb_channels;
+    uint8_t **tmp = NULL;
+    if (av_samples_alloc_array_and_samples(&tmp, NULL, ch, n, AV_SAMPLE_FMT_FLT, 0) < 0) return -1;
+    av_audio_fifo_read(b->fifo, (void **)tmp, n);
+    int r = pc_out_write(b->out, tmp[0], n * ch * (int)sizeof(float), NAN, &b->out_serial, serial) < 0 ? -1 : 0;
+    if (r == 0) b->out_samples += n;
+    av_freep(&tmp[0]);
+    av_freep(&tmp);
+    return r;
+}
+
 static int send_bursts(SBBridge *b, int serial) {
+    if (b->pcm) return send_pcm(b, serial);
     int fs = pc_enc_frame_size(b->enc);
     uint8_t *planes[8] = { 0 };
     int nplanes = av_sample_fmt_is_planar(pc_enc_sample_fmt(b->enc)) ? b->enc_layout.nb_channels : 1;
@@ -280,7 +302,7 @@ static int to_fifo(SBBridge *b, uint8_t **data, int n) {
         if (pc_upmix_update(b->um, &u) != 0) {      // the crossover: rebuild (a short dropout)
             pc_upmix_free(&b->um);
             char e[256] = "";
-            b->um = pc_upmix_create(&u, 48000, &b->enc_layout, pc_enc_sample_fmt(b->enc), e, sizeof(e));
+            b->um = pc_upmix_create(&u, 48000, &b->enc_layout, b->fmt, e, sizeof(e));
             if (!b->um) return -1;
         }
         b->um_gen = gen;
@@ -295,21 +317,44 @@ static int to_fifo(SBBridge *b, uint8_t **data, int n) {
     return 0;
 }
 
+// PCM: `seconds` of silence into the output ring. PCM plays the moment it arrives (there's no
+// burst gate building a cushion as with bitstreams), so the ring starts with one and is topped up
+// at once when it runs low; the drift control alone (+-1000 ppm = 1 ms/s) would take far too long.
+static void pcm_pad(SBBridge *b, double seconds, int serial) {
+    int ch = b->enc_layout.nb_channels, frames = (int)(seconds * 48000);
+    if (frames <= 0) return;
+    float *z = av_calloc((size_t)frames * ch, sizeof(float));
+    if (!z) return;
+    pc_out_write(b->out, (const uint8_t *)z, frames * ch * (int)sizeof(float), NAN, &b->out_serial, serial);
+    av_free(z);
+}
+
 // Holds the output ring at its target fill by trimming the resampler (input vs output clock).
 //  - auto target (target_buffer_ms 0): 2 s after audio starts, lock onto the fill reached then
 //    (the device's own buffer pulls ~30-40 ms ahead at start, so a fixed ring target only adds
 //    delay), but never below one burst + 8 ms nor above one burst + 24 ms: on Windows the start-up
 //    backlog (VB-Cable) left it at ~72 ms, and the excess is cut once at the lock. Each output gap
 //    after that raises the target 8 ms (to one burst + 100 ms at most).
+//  - PCM: after an underrun (pc_out_gaps went up) the ring is refilled to the target with silence.
 //  - a jump of more than 40 ms over target (a virtual device delivering a backlog when its
 //    clients start/stop) is cut at once by dropping that much input; following it at +-1000 ppm
 //    would take a minute of wrong lip sync.
-static void steer(SBBridge *b, int64_t produced) {
+static void steer(SBBridge *b, int64_t produced, int serial) {
     if (b->cfg.dump_path) return;   // a file sink consumes instantly: nothing to steer against
     double fill = pc_out_buffered_seconds(b->out);
     b->fill_ema = b->fill_ema * 0.95 + fill * 0.05;
     atomic_store(&b->st_fill, b->fill_ema);
-    double burst_s = pc_enc_burst_bytes(b->enc) / 4 / 48000.0;
+    // the output's write granularity: one burst, or (PCM) up to one worker chunk at a time
+    double burst_s = b->pcm ? CHUNK / 48000.0 : pc_enc_burst_bytes(b->enc) / 4 / 48000.0;
+    double want = b->target_locked ? b->target : burst_s + 0.008;
+    long long pg = b->pcm ? pc_out_gaps(b->out) : 0;
+    if (pg > b->pcm_gaps) {   // PCM underrun (the device played silence): refill the cushion at once
+        b->pcm_gaps = pg;
+        if (fill < want) pcm_pad(b, want - fill, serial);
+        b->fill_ema = want;
+        b->cooldown_until = produced + 48000 / 2;
+        atomic_fetch_add(&b->jumps, 1);
+    }
     if (!b->target_locked) {
         if (produced < b->settle_at) return;
         double min_safe = burst_s + 0.008, max_auto = burst_s + 0.024;
@@ -370,7 +415,7 @@ static void *worker_thread(void *arg) {
     int serial = atomic_load(&b->out_serial);
     float *chunk = av_malloc((size_t)CHUNK * b->in_ch * sizeof(float));
     int planes_ch = b->upmixing ? 2 : b->enc_layout.nb_channels;
-    enum AVSampleFormat pfmt = b->upmixing ? AV_SAMPLE_FMT_FLTP : pc_enc_sample_fmt(b->enc);
+    enum AVSampleFormat pfmt = b->upmixing ? AV_SAMPLE_FMT_FLTP : b->fmt;
     uint8_t **cvt = NULL;
     int cvt_max = swr_get_out_samples(b->swr, CHUNK) + 256;
     av_samples_alloc_array_and_samples(&cvt, NULL, planes_ch, cvt_max, pfmt, 0);
@@ -408,7 +453,7 @@ static void *worker_thread(void *arg) {
             produced += out;
             if (to_fifo(b, cvt, out) < 0 || send_bursts(b, serial) < 0) goto done;
         }
-        steer(b, produced);
+        steer(b, produced, serial);
     }
     // end of a file input: drain the resampler and the upmix graph, pad the last frame
     {
@@ -423,12 +468,12 @@ static void *worker_thread(void *arg) {
                 av_freep(&sil[0]); av_freep(&sil);
             }
         }
-        int left = av_audio_fifo_size(b->fifo) % pc_enc_frame_size(b->enc);
+        int left = b->pcm ? 0 : av_audio_fifo_size(b->fifo) % pc_enc_frame_size(b->enc);
         if (left) {
             int pad = pc_enc_frame_size(b->enc) - left;
             uint8_t **sil = NULL;
-            if (av_samples_alloc_array_and_samples(&sil, NULL, b->enc_layout.nb_channels, pad, pc_enc_sample_fmt(b->enc), 0) >= 0) {
-                av_samples_set_silence(sil, 0, pad, b->enc_layout.nb_channels, pc_enc_sample_fmt(b->enc));
+            if (av_samples_alloc_array_and_samples(&sil, NULL, b->enc_layout.nb_channels, pad, b->fmt, 0) >= 0) {
+                av_samples_set_silence(sil, 0, pad, b->enc_layout.nb_channels, b->fmt);
                 av_audio_fifo_write(b->fifo, (void **)sil, pad);
                 av_freep(&sil[0]); av_freep(&sil);
             }
@@ -467,6 +512,7 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
     b->target = 0;
     b->target_locked = 0;
     b->skip_in = 0;
+    b->pcm_gaps = 0;
     b->settle_at = INT64_MAX;
     b->cooldown_until = 0;
     atomic_store(&b->jumps, 0);
@@ -494,54 +540,87 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
     PCUpmix up = upmix_settings(b);
     b->upmixing = up.enabled && b->in_ch <= 2;
     // upmixed: the graph makes 5.1 with back surrounds, its aformat stage moves them to the side
-    // pair, the layout both encoders take (FFmpeg's DTS encoder has no 5.1(back))
+    // pair, the layout both encoders take (FFmpeg's DTS encoder has no 5.1(back)) and the one
+    // HDMI receivers expect for 5.1 PCM
     if (b->upmixing) b->enc_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT1;
     else if (b->in_ch >= 6) b->enc_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT1;
     else b->enc_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
+    b->pcm = b->cfg.codec == SB_CODEC_PCM;
     int dts = b->cfg.codec == SB_CODEC_DTS;
-    int64_t rate = dts ? (b->cfg.dts_bitrate_kbps > 0 && b->cfg.dts_bitrate_kbps < 1000 ? 754500 : 1509750)
-                       : (int64_t)(b->cfg.ac3_bitrate_kbps > 0 ? FFMIN(b->cfg.ac3_bitrate_kbps, 640) : 640) * 1000;
-    b->enc = pc_enc_open(dts ? AV_CODEC_ID_DTS : AV_CODEC_ID_AC3, &b->enc_layout, rate, err, errlen);
-    if (!b->enc) goto fail;
+    if (b->pcm) {
+        // 3. multichannel PCM, exclusive: ask for the layout, then lay the audio out the way the
+        //    device opened (its channel count and speaker order; pc_output converts the samples)
+        if (!b->upmixing && b->in_ch >= 8) b->enc_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_7POINT1;
+        PCDeviceFormat req = { 0 };
+        req.channels = b->enc_layout.nb_channels;
+        req.rate = 48000;
+        req.channel_mask = (uint32_t)b->enc_layout.u.mask;   // FFmpeg AV_CH_* bits == WAVE SPEAKER_* bits
+        if (b->cfg.dump_path)
+            b->out = pc_out_open_file(b->cfg.dump_path, 0, req.channels, 48000, req.channel_mask, err, errlen);
+        else
+            b->out = pc_out_open(b->cfg.output_uid ? b->cfg.output_uid : "", PC_STREAM_PCM_EXCLUSIVE, &req, err, errlen);
+        if (!b->out) goto fail;
+        if (pc_out_rate(b->out) != 48000) {
+            snprintf(err, errlen, "The output opened at %.0f Hz; multichannel PCM needs it at 48 kHz", pc_out_rate(b->out));
+            goto fail;
+        }
+        int ch = pc_out_channels(b->out) > 8 ? 8 : pc_out_channels(b->out);
+        uint32_t mask = pc_out_channel_mask(b->out);
+        AVChannelLayout got = { 0 };
+        if (!mask || av_channel_layout_from_mask(&got, mask) < 0 || got.nb_channels != ch) av_channel_layout_default(&got, ch);
+        b->enc_layout = got;
+        b->fmt = AV_SAMPLE_FMT_FLT;
+    } else {
+        int64_t rate = dts ? (b->cfg.dts_bitrate_kbps > 0 && b->cfg.dts_bitrate_kbps < 1000 ? 754500 : 1509750)
+                           : (int64_t)(b->cfg.ac3_bitrate_kbps > 0 ? FFMIN(b->cfg.ac3_bitrate_kbps, 640) : 640) * 1000;
+        b->enc = pc_enc_open(dts ? AV_CODEC_ID_DTS : AV_CODEC_ID_AC3, &b->enc_layout, rate, err, errlen);
+        if (!b->enc) goto fail;
+        b->fmt = pc_enc_sample_fmt(b->enc);
 
-    // 3. output (exclusive IEC 61937), or a file
-    if (b->cfg.dump_path) b->out = pc_out_open_file(b->cfg.dump_path, 1, 2, 48000, 0, err, errlen);
-    else b->out = pc_out_open(b->cfg.output_uid ? b->cfg.output_uid : "", dts ? PC_STREAM_IEC61937_DTS : PC_STREAM_IEC61937_AC3,
-                              NULL, err, errlen);
-    if (!b->out) goto fail;
-    pc_out_set_burst_size(b->out, pc_enc_burst_bytes(b->enc));
-    const uint8_t *sil = NULL;
-    int sn = pc_enc_silence_burst(b->enc, &sil);
-    if (sn > 0) {
-        pc_out_set_silence_burst(b->out, sil, sn);
-        memcpy(b->silence, sil, sn);
-        b->silence_len = sn;
+        // 3. output (exclusive IEC 61937), or a file
+        if (b->cfg.dump_path) b->out = pc_out_open_file(b->cfg.dump_path, 1, 2, 48000, 0, err, errlen);
+        else b->out = pc_out_open(b->cfg.output_uid ? b->cfg.output_uid : "", dts ? PC_STREAM_IEC61937_DTS : PC_STREAM_IEC61937_AC3,
+                                  NULL, err, errlen);
+        if (!b->out) goto fail;
+        pc_out_set_burst_size(b->out, pc_enc_burst_bytes(b->enc));
+        const uint8_t *sil = NULL;
+        int sn = pc_enc_silence_burst(b->enc, &sil);
+        if (sn > 0) {
+            pc_out_set_silence_burst(b->out, sil, sn);
+            memcpy(b->silence, sil, sn);
+            b->silence_len = sn;
+        }
     }
 
     // 4. converters: the input's channels/rate -> 48 kHz planar (stereo for the upmix)
     AVChannelLayout in_lay = { 0 }, stereo = AV_CHANNEL_LAYOUT_STEREO;
     av_channel_layout_default(&in_lay, b->in_ch);
     if (swr_alloc_set_opts2(&b->swr, b->upmixing ? &stereo : &b->enc_layout,
-                            b->upmixing ? AV_SAMPLE_FMT_FLTP : pc_enc_sample_fmt(b->enc), 48000,
+                            b->upmixing ? AV_SAMPLE_FMT_FLTP : b->fmt, 48000,
                             &in_lay, AV_SAMPLE_FMT_FLT, (int)lrint(b->in_rate), 0, NULL) < 0 || swr_init(b->swr) < 0) {
         snprintf(err, errlen, "Resampler setup failed");
         goto fail;
     }
     if (b->upmixing) {
-        b->um = pc_upmix_create(&up, 48000, &b->enc_layout, pc_enc_sample_fmt(b->enc), err, errlen);
+        b->um = pc_upmix_create(&up, 48000, &b->enc_layout, b->fmt, err, errlen);
         if (!b->um) goto fail;
         b->um_gen = atomic_load(&b->upmix_gen);
     }
-    b->fifo = av_audio_fifo_alloc(pc_enc_sample_fmt(b->enc), b->enc_layout.nb_channels, pc_enc_frame_size(b->enc) * 4);
+    b->fifo = av_audio_fifo_alloc(b->fmt, b->enc_layout.nb_channels, b->pcm ? CHUNK * 2 : pc_enc_frame_size(b->enc) * 4);
 
     char lay[64] = "";
     av_channel_layout_describe(&b->enc_layout, lay, sizeof(lay));
     pc_mutex_lock(&b->lock);
-    snprintf(b->out_desc, sizeof(b->out_desc), "%s %s %lld kb/s%s, IEC 61937 -> %s", dts ? "DTS" : "Dolby Digital", lay,
-             (long long)(pc_enc_bit_rate(b->enc) / 1000), b->upmixing ? " (upmixed from stereo)" : "", pc_out_description(b->out));
+    if (b->pcm)
+        snprintf(b->out_desc, sizeof(b->out_desc), "PCM %s 48 kHz%s, exclusive -> %s", lay,
+                 b->upmixing ? " (upmixed from stereo)" : "", pc_out_description(b->out));
+    else
+        snprintf(b->out_desc, sizeof(b->out_desc), "%s %s %lld kb/s%s, IEC 61937 -> %s", dts ? "DTS" : "Dolby Digital", lay,
+                 (long long)(pc_enc_bit_rate(b->enc) / 1000), b->upmixing ? " (upmixed from stereo)" : "", pc_out_description(b->out));
     pc_mutex_unlock(&b->lock);
 
     // 5. go: output first (it plays keep-alive silence until data arrives), then the input
+    if (b->pcm && !b->cfg.dump_path) pcm_pad(b, CHUNK / 48000.0 + 0.008, atomic_load(&b->out_serial));   // the cushion
     if (!b->cfg.dump_path && pc_out_start(b->out) != 0) { snprintf(err, errlen, "Could not start the output"); goto fail; }
     if (pc_thread_create(&b->worker, worker_thread, b) != 0) { snprintf(err, errlen, "Thread start failed"); goto fail; }
     b->have_worker = 1;
@@ -583,6 +662,7 @@ void sb_bridge_stop(SBBridge *b) {
     free_cfg_strings(b);
     b->running = 0;
     b->upmixing = 0;
+    b->pcm = 0;
 }
 
 void sb_bridge_status(SBBridge *b, SBStatus *st) {

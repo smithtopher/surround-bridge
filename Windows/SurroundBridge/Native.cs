@@ -10,7 +10,7 @@ internal static unsafe class Native
 {
     private const string Dll = "bridgecore.dll";
 
-    public const int SB_CODEC_AC3 = 0, SB_CODEC_DTS = 1;
+    public const int SB_CODEC_AC3 = 0, SB_CODEC_DTS = 1, SB_CODEC_PCM = 2;   // PCM: multichannel, exclusive (Mac 1.2.0)
 
     [StructLayout(LayoutKind.Sequential)]
     public struct PCDevice
@@ -38,6 +38,7 @@ internal static unsafe class Native
         public float bass_db;
         public float rear_delay_ms;
         public int rear_highcut_hz;
+        public float treble_db;         // 0..12 dB high-shelf (6 kHz), added in Mac 1.2.0
     }
 
     [StructLayout(LayoutKind.Sequential)]

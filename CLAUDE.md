@@ -6,7 +6,7 @@ Sister project of Surround Player (`~/code/music_player`, github smithtopher/Sur
 shares the output, upmix and encode code (copied, see SHARED.md). README.md is the user-facing doc,
 docs/PLAN.md the roadmap.
 
-## Status (2026-11-21)
+## Status (2026-11-23: Mac 1.2.0 adds multichannel PCM and treble boost, see "Pipeline decisions")
 - **1.0.0: menu-bar app + installer** (`Sources/SurroundBridge`, `scripts/make_installer.sh`). Built and
   inspected; the running path of the app (switch on → DD 5.1 to the TV) is **not yet tested in the
   app** (the TV was off), only via `sbridge`. The installer hasn't been run (needs admin: the user).
@@ -170,6 +170,35 @@ scripts/build_ffmpeg*.sh   same as Surround Player's (static 9.0.2, avfilter wit
 - **Latency estimate** (`SBStatus.latency_ms`): capture IO + half a chunk + upmix 2048 samples + one
   encoder frame + ring fill + device latency. Expect roughly 120–150 ms with AC3 and upmix; needs measuring.
 - **Upmix defaults** = Surround Player's "Music" preset.
+- **Multichannel PCM (`SB_CODEC_PCM`, Mac 1.2.0, 2026-11-23):**
+  - No encoder (`b->enc` NULL, `b->pcm`). Output: `pc_out_open(PC_STREAM_PCM_EXCLUSIVE)`, the
+    shared CoreAudio/WASAPI path from Surround Player, asking for 5.1(side) 48 kHz when upmixed,
+    else the input's layout (6 → 5.1, 8 → 7.1, else stereo). The audio is laid out the way the
+    device opened (`pc_out_channels/channel_mask` → `b->enc_layout`, packed float `b->fmt`; the
+    upmix graph's aformat targets it), and the device must run at 48 kHz.
+  - The fifo goes out as it fills (`send_pcm`). Steer granularity is one worker chunk (21 ms)
+    instead of a burst.
+  - **PCM needs a cushion:** it plays the moment it arrives (no burst gate), so without one the
+    ring sat at ~10 ms with constant underruns and the drift control pinned. `pcm_pad` writes
+    chunk + 8 ms of silence before the start, and refills to the target after each underrun.
+    `pc_output.c` now counts PCM underruns in `pc_out_gaps` too, one per gap. Triggering on low
+    fill instead fired on normal IO jitter and added latency.
+  - Live 2026-11-23 (silent media): Surround Bridge device → the Samsung over HDMI accepted 6 ch
+    24-bit 48 kHz (order L R LFE C Ls Rs), ~91 ms estimated delay vs ~140 ms AC3. Stable fill, a
+    gap or two at start only. Built-in speakers: stereo works; 6 ch is refused with a clear message.
+  - Windows: `Native.cs` has the constant; the tray app's UI doesn't offer it yet.
+- **Tone (`PCUpmix.treble_db`, Mac 1.2.0):** a treble high shelf (6 kHz) next to the bass shelf
+  (100 Hz), both before the surround filter, so they only work with the upmix on.
+  - Our FFmpeg has no `treble` filter, so it's a second `bass` (low shelf) of −T dB plus +T dB of
+    gain via surround's `fl_in`/`fr_in`. That's exactly a high shelf of +T in FFmpeg's SVF biquads
+    (same poles, mix coefficients × A²). Surround's `level_in` does NOT work for this: the
+    per-channel `fl_in`/`fr_in` override it.
+  - regress "tone": treble +6 → +6.4 dB at 12 kHz with 60 Hz/1 kHz unchanged; bass the mirror
+    image. Q 0.7 shelves overshoot ~0.3 dB.
+  - The app keeps tone (bass + treble) out of the presets: a preset no longer sets bass (Wide used
+    to set +3), so a loudness curve survives mode changes. Key `upmixTrebleDb`.
+  - `Windows/SurroundBridge/Native.cs` PCUpmix has the field (it must match the C struct), but
+    there's no UI there yet.
 
 ## Testing — IMPORTANT
 - **Never play audible test signals on a real device.** The TV is often the default output. Use silent

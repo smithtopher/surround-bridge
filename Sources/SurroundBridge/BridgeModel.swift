@@ -48,7 +48,7 @@ final class BridgeModel: ObservableObject {
             if outputUID != oldValue { restartIfOn() }
         }
     }
-    /// 0 Dolby Digital, 1 DTS
+    /// 0 Dolby Digital, 1 DTS, 2 multichannel PCM (HDMI receivers; SB_CODEC_*)
     @Published var codec: Int = defaults.object(forKey: "codec") as? Int ?? 0 {
         didSet { d.set(codec, forKey: "codec"); if codec != oldValue { restartIfOn() } }
     }
@@ -119,7 +119,7 @@ final class BridgeModel: ObservableObject {
         case .off: return "Off"
         case .starting: return "Starting…"
         case .running:
-            let codecName = codec == 1 ? "DTS" : "Dolby Digital"
+            let codecName = codec == 2 ? "PCM" : codec == 1 ? "DTS" : "Dolby Digital"
             let lay = upmix.enabled ? "5.1" : (status.channels >= 6 ? "5.1" : "stereo")
             return "\(codecName) \(lay) → \(selectedOutput?.name ?? "output") · ~\(Int(status.latency_ms.rounded())) ms"
         case .needsPermission: return "Needs microphone access (see below)"
@@ -202,7 +202,7 @@ final class BridgeModel: ObservableObject {
         state = .starting
         generation += 1
         let gen = generation
-        let codec = Int32(self.codec == 1 ? SB_CODEC_DTS : SB_CODEC_AC3)
+        let codec = Int32(self.codec == 2 ? SB_CODEC_PCM : self.codec == 1 ? SB_CODEC_DTS : SB_CODEC_AC3)
         let ac3 = Int32(ac3Bitrate), dts = Int32(dtsBitrate)
         let bridge = self.bridge
         queue.async {

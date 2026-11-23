@@ -17,6 +17,19 @@
   capture buffer. Measured with the TV: from ~50 dropouts in 30 s to none after start-up.
 - `sbridge` shows `gaps`: output underruns (a silence burst played in place of audio).
 
+## [1.2.0] — 2026-11-23 (macOS)
+
+- **Multichannel PCM** (Settings ▸ General ▸ Format): uncompressed 5.1 for an AV receiver connected
+  to the Mac by HDMI, like Surround Player's option. It has the best quality and less delay
+  (~90 ms instead of ~140 ms), but optical can't carry it. Upmixed stereo goes out as 5.1, in the
+  speaker order the receiver reports.
+- **Treble boost**, next to the bass boost, in a new **Tone** section (and in the menu). Turning
+  both up gives a loudness curve for listening at low volume.
+- Tone is no longer part of the upmix presets, so your settings stay when you change the mode (Wide
+  used to set the bass boost to +3 dB).
+- Under the hood: the shared Windows changes up to Windows 1.0.2 (auto buffer target cap, the
+  output-gap counter).
+
 ## [1.1.0] — 2026-11-23 (macOS)
 
 - **Its own audio device:** the installer now adds the **Surround Bridge** audio device (2 channels,

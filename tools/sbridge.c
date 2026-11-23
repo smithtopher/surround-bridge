@@ -1,6 +1,6 @@
 // sbridge: command-line front end for the bridge (prototype; the menu-bar app comes later).
 //   sbridge devices
-//   sbridge run  [--input DEV] [--output DEV] [--dts] [--bitrate N] [--no-upmix] [--upmix-set k=v,...] [--seconds N]
+//   sbridge run  [--input DEV] [--output DEV] [--dts | --pcm] [--bitrate N] [--no-upmix] [--upmix-set k=v,...] [--seconds N]
 //   sbridge file <media> <out.spdif> [--realtime] [--dts] [--no-upmix] [--upmix-set k=v,...]
 // DEV: a device UID or part of its name ("SAMSUNG"; Windows: "CABLE Output", or "loopback" devices:
 // what plays on an output, e.g. "CABLE Input (loopback)"). The default input on macOS is the
@@ -71,6 +71,7 @@ static void parse_upmix(const char *spec, PCUpmix *u) {
         else if (!strcmp(kv, "bass")) u->bass_db = (float)v;
         else if (!strcmp(kv, "delay")) u->rear_delay_ms = (float)v;
         else if (!strcmp(kv, "highcut")) u->rear_highcut_hz = (int)v;
+        else if (!strcmp(kv, "treble")) u->treble_db = (float)v;
         else fprintf(stderr, "unknown upmix key %s\n", kv);
     }
 }
@@ -92,7 +93,7 @@ int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     if (argc < 2) {
         fprintf(stderr, "usage: sbridge devices\n"
-                        "       sbridge run  [--input DEV | --input-file F] [--output DEV] [--dts] [--bitrate N] [--no-upmix] [--upmix-set k=v,...]\n"
+                        "       sbridge run  [--input DEV | --input-file F] [--output DEV] [--dts | --pcm] [--bitrate N] [--no-upmix] [--upmix-set k=v,...]\n"
                         "                    [--seconds N] [--buffer-ms N] [--dump F]\n"
                         "                    (--input-file: F at real time, e.g. silent media to test a device;\n"
                         "                     --dump: write the IEC 61937 stream to F instead of a device, to test the capture side)\n"
@@ -117,6 +118,7 @@ int main(int argc, char **argv) {
         if (!strcmp(argv[i], "--input") && i + 1 < argc) in_want = argv[++i];
         else if (!strcmp(argv[i], "--output") && i + 1 < argc) out_want = argv[++i];
         else if (!strcmp(argv[i], "--dts")) cfg.codec = SB_CODEC_DTS;
+        else if (!strcmp(argv[i], "--pcm")) cfg.codec = SB_CODEC_PCM;   // multichannel PCM, exclusive
         else if (!strcmp(argv[i], "--bitrate") && i + 1 < argc) cfg.ac3_bitrate_kbps = cfg.dts_bitrate_kbps = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--no-upmix")) up.enabled = 0;
         else if (!strcmp(argv[i], "--upmix-set") && i + 1 < argc) parse_upmix(argv[++i], &up);

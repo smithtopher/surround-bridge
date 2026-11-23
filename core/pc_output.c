@@ -41,6 +41,7 @@ struct PCOut {
     _Atomic int have_silence;
     int played_real;                // a real burst has played (render callback only)
     _Atomic long long gaps;         // silence bursts played after real data started: underruns
+    int starved;                    // PCM: the ring ran dry in the last callback (count each gap once)
     // clock record, written by the render callback (seqlock)
     _Atomic uint32_t seq;
     _Atomic int64_t rec_pos, rec_len;
@@ -182,6 +183,13 @@ static void render(void *ctx, uint8_t *dst, int frames, int64_t present_ns) {
             r += real_len;
         }
         if (n < frames) memset(dst + n * dbpf, 0, (size_t)(frames - n) * dbpf);
+        if (n > 0) o->played_real = 1;
+        if (n < frames && o->played_real && !paused) {   // an underrun: silence where audio was due
+            if (!o->starved) atomic_fetch_add_explicit(&o->gaps, 1, memory_order_relaxed);
+            o->starved = 1;
+        } else {
+            o->starved = 0;
+        }
     }
 
     atomic_store_explicit(&o->rpos, r, memory_order_release);

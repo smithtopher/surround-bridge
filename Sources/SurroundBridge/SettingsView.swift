@@ -37,8 +37,11 @@ struct GeneralSettings: View {
                 Picker("Format", selection: $model.codec) {
                     Text("Dolby Digital (AC3)").tag(0)
                     Text("DTS").tag(1)
+                    Text("Multichannel PCM").tag(2)
                 }
-                if model.codec == 0 {
+                if model.codec == 2 {
+                    note("Uncompressed 5.1, for an AV receiver connected to the Mac by HDMI: the best quality and less delay. Optical (S/PDIF) can't carry it, so for a TV that passes sound on to an amp over optical, use Dolby Digital.")
+                } else if model.codec == 0 {
                     Picker("Dolby Digital bitrate", selection: $model.ac3Bitrate) {
                         Text("384 kb/s").tag(384)
                         Text("448 kb/s (DVD)").tag(448)
@@ -77,6 +80,10 @@ struct UpmixSettingsView: View {
                 }
                 note("Changes apply while it plays. Sound that's already 5.1 (from apps that output it) isn't upmixed.")
             } header: { Text("Stereo Upmix") }
+            Section {
+                ToneSliders(compact: false)
+                note("Turn both up for listening at low volume: quiet sound loses bass first, and treble too, to the ear (the Fletcher-Munson curves). Tone stays as you set it when you change the upmix mode, and works while the upmix is on.")
+            } header: { Text("Tone") }
         }
         .formStyle(.grouped)
     }
@@ -119,6 +126,39 @@ struct UpmixBindings {
     }
 }
 
+/// Bass and treble boost: shelves before the upmix (100 Hz and 6 kHz). Not part of the presets.
+struct ToneSliders: View {
+    @EnvironmentObject var model: BridgeModel
+    let compact: Bool
+
+    var body: some View {
+        let b = UpmixBindings(model: model)
+        let on = model.upmix.enabled
+        Group {
+            ToneRow(title: "Bass boost", value: b.up(\.bassDb, custom: false), compact: compact)
+            ToneRow(title: "Treble boost", value: b.up(\.trebleDb, custom: false), compact: compact)
+        }
+        .disabled(!on)
+        .help(on ? "" : "Tone works while the upmix is on")
+    }
+}
+
+private struct ToneRow: View {
+    let title: String
+    let value: Binding<Double>
+    let compact: Bool
+    var body: some View {
+        HStack {
+            if compact { Text(title.replacingOccurrences(of: " boost", with: "")).font(.caption).frame(width: 78, alignment: .leading) }
+            Slider(value: value, in: 0...12, step: 0.5) { if !compact { Text(title) } }
+                .controlSize(compact ? .small : .regular)
+            Text(value.wrappedValue < 0.25 ? "Off" : String(format: "+%.1f dB", value.wrappedValue))
+                .font(compact ? .caption : .body).monospacedDigit()
+                .frame(width: compact ? 70 : 84, alignment: .trailing)
+        }
+    }
+}
+
 struct UpmixSliders: View {
     @EnvironmentObject var model: BridgeModel
     let compact: Bool
@@ -143,7 +183,6 @@ struct UpmixSliders: View {
                         Text("Copy (main speakers keep it)").tag(false)
                         Text("Move (small main speakers)").tag(true)
                     }
-                    slider("Bass boost", b.up(\.bassDb), 0...12, step: 0.5) { $0 < 0.25 ? "Off" : String(format: "+%.1f dB", $0) }
                     slider("Rear delay", b.up(\.rearDelayMs), 0...30, step: 1) { $0 < 0.5 ? "Off" : String(format: "%.0f ms", $0) }
                     Picker("Rear high-cut", selection: b.up(\.rearHighcutHz)) {
                         Text("Off").tag(0)

@@ -143,7 +143,7 @@ struct MeterRow: View {
     }
 }
 
-/// Mode + the four main sliders (the full set, with Advanced, is in Settings ▸ Upmix).
+/// Mode, the four main sliders and tone (the full set, with Advanced, is in Settings ▸ Upmix).
 struct UpmixQuickControls: View {
     @EnvironmentObject var model: BridgeModel
 
@@ -155,6 +155,7 @@ struct UpmixQuickControls: View {
             Text(model.upmix.mode.blurb).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if model.upmix.enabled {
                 UpmixSliders(compact: true)
+                ToneSliders(compact: true)
             }
         }
     }

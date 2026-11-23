@@ -25,10 +25,20 @@ Downloads are on the [`releases` branch](https://github.com/smithtopher/surround
 While it's on, the Mac's sound output points at the bridge, and everything plays through your amp
 as Dolby Digital (or DTS) 5.1. Switch it off and your previous output comes back.
 
-**Settings:** output device, Dolby Digital or DTS and the bitrate, start at login; **Upmix:** the same
-presets and sliders as Surround Player (Music, Movies & TV, Wide, Custom; surround level, centre
-focus, width, subwoofer; Advanced: crossover, bass routing, bass boost, rear delay, rear high-cut).
-They apply while it plays.
+**Settings:**
+- output device, start at login;
+- format: Dolby Digital or DTS (and the bitrate), or **Multichannel PCM**. PCM is uncompressed 5.1
+  for an AV receiver connected to the Mac by HDMI (Mac 1.2.0). It has the best quality and less
+  delay, but optical can't carry it.
+
+**Upmix:** the same presets and sliders as Surround Player (Music, Movies & TV, Wide, Custom; surround
+level, centre focus, width, subwoofer; Advanced: crossover, bass routing, rear delay, rear high-cut).
+
+**Tone:** bass boost and treble boost (Mac 1.2.0). Turn both up for listening at low volume, where
+the ear loses bass and treble first (the Fletcher-Munson curves). They're kept when you change the
+upmix mode.
+
+Everything applies while it plays.
 
 **Uninstall:** Settings ▸ About ▸ Uninstall (removes the app and its audio device).
 
@@ -62,7 +72,7 @@ build/arm64/sbridge devices
 build/arm64/sbridge run --output "SAMSUNG"      # input: the Surround Bridge device, else BlackHole
 ```
 
-Options: `--dts`, `--bitrate N`, `--no-upmix`, `--upmix-set surround=-3,center=0.5,width=0.6,lfe=-6,xover=100,move=0,bass=0,delay=10,highcut=7000`,
+Options: `--dts` or `--pcm` (multichannel PCM), `--bitrate N`, `--no-upmix`, `--upmix-set surround=-3,center=0.5,width=0.6,lfe=-6,xover=100,move=0,bass=0,treble=0,delay=10,highcut=7000`,
 `--buffer-ms N`.
 
 ## How it works

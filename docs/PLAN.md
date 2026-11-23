@@ -32,6 +32,12 @@
   latency, "locked" indicator). Launch at login (SMAppService). Sleep/wake and HDMI hot-plug
   (TV input changes). Auto-switches the system output to the bridge device and back.
 
+## Features (Mac 1.2.0, 2026-11-23)
+- [x] Multichannel PCM output (HDMI receivers), like Surround Player's.
+- [x] Treble boost (loudness curve with the bass boost).
+- [ ] Windows UI for both (the core and Native.cs have them).
+- [ ] Surround Player: treble boost too (SHARED.md).
+
 ## Windows ← started 2026-11-22
 - [x] CMake + clang-cl build of the core and `sbridge.exe`; `regress.sh` ALL PASSED on Windows 11.
 - [x] WASAPI capture back-end (`capture_wasapi.c`): capture endpoints and loopback of render

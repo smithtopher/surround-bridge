@@ -2,6 +2,11 @@
 //
 //   abuffer (stereo fltp)
 //     -> bass@ub      low shelf, the "bass boost"
+//     -> bass@ut      the "treble boost": a high shelf of +T dB at 6 kHz, built as a low shelf of
+//                     -T dB there plus +T dB of gain (surround's fl_in/fr_in; its level_in is
+//                     overridden by those per-channel levels). For FFmpeg's shelving
+//                     filters highshelf(+T) == 10^(T/20) * lowshelf(-T) exactly (same SVF poles,
+//                     mix coefficients scaled by A^2), and our FFmpeg is built without "treble".
 //     -> surround@us  FFT ambience extraction to 5.1 (FL FR FC LFE BL BR)
 //     -> adelay@ud    rear delay
 //     -> lowpass@ul   rear high-cut (BL|BR only)
@@ -30,6 +35,7 @@
 #include <string.h>
 
 #define WIN_SIZE 4096                  // surround filter window; latency is half of it
+#define TREBLE_HZ "6000"               // treble shelf midpoint
 
 struct PCUpmixer {
     AVFilterGraph *graph;
@@ -53,6 +59,7 @@ void pc_upmix_sanitize(PCUpmix *u) {
     u->lfe_move = u->lfe_move != 0;
     u->bass_db = clampf(u->bass_db, 0, 12);
     u->rear_delay_ms = clampf(u->rear_delay_ms, 0, 30);
+    u->treble_db = clampf(u->treble_db, 0, 12);
     if (u->rear_highcut_hz != 0) u->rear_highcut_hz = clampi(u->rear_highcut_hz, 2000, 20000);
 }
 
@@ -60,7 +67,7 @@ static float db_gain(float db) { return db <= -40 ? 0 : powf(10.f, db / 20.f); }
 
 // Every value the filters get, derived from the settings (one place, used for create + update).
 typedef struct {
-    float rear, fc_out, front_x, angle, lfe_out, bass, delay_ms, highcut;
+    float rear, fc_out, front_x, angle, lfe_out, bass, treble, treble_gain, delay_ms, highcut;
     int lfe_on, lfe_low, lfe_high, lfe_mode;
 } Params;
 
@@ -76,6 +83,8 @@ static Params params(const PCUpmix *u, int rate) {
     q.lfe_high = clampi(u->crossover_hz * 5 / 4, q.lfe_low + 1, 512);
     q.lfe_mode = u->lfe_move;
     q.bass = u->bass_db;
+    q.treble = u->treble_db;
+    q.treble_gain = powf(10.f, u->treble_db / 20.f);
     q.delay_ms = u->rear_delay_ms;
     float nyq = rate * 0.45f;
     q.highcut = u->rear_highcut_hz > 0 ? fminf((float)u->rear_highcut_hz, nyq) : nyq;
@@ -107,13 +116,14 @@ PCUpmixer *pc_upmix_create(const PCUpmix *settings, int rate, const AVChannelLay
     av_channel_layout_describe(out_layout, lay, sizeof(lay));
     snprintf(desc, sizeof(desc),
              "bass@ub=g=%.2f:f=100:t=q:w=0.7,"
-             "surround@us=chl_out=5.1:win_size=%d:level_in=1:level_out=1.26:lfe=%d:lfe_low=%d:lfe_high=%d:lfe_mode=%d:"
+             "bass@ut=g=%.2f:f=" TREBLE_HZ ":t=q:w=0.7,"
+             "surround@us=chl_out=5.1:win_size=%d:fl_in=%.4f:fr_in=%.4f:level_out=1.26:lfe=%d:lfe_low=%d:lfe_high=%d:lfe_mode=%d:"
              "angle=%.2f:fc_out=%.3f:flx=%.3f:frx=%.3f:bl_out=%.4f:br_out=%.4f:lfe_out=%.4f,"
              "adelay@ud=delays=0|0|0|0|%.2f|%.2f,"
              "lowpass@ul=f=%.0f:c=BL|BR,"
              "alimiter=limit=0.98:attack=5:release=50:level=0:latency=1,"
              "aformat=sample_fmts=%s:channel_layouts=%s",
-             q.bass, WIN_SIZE, q.lfe_on, q.lfe_low, q.lfe_high, q.lfe_mode,
+             q.bass, -q.treble, WIN_SIZE, q.treble_gain, q.treble_gain, q.lfe_on, q.lfe_low, q.lfe_high, q.lfe_mode,
              q.angle, q.fc_out, q.front_x, q.front_x, q.rear, q.rear, q.lfe_out,
              q.delay_ms, q.delay_ms, q.highcut, av_get_sample_fmt_name(out_fmt), lay);
 
@@ -163,6 +173,11 @@ int pc_upmix_update(PCUpmixer *m, const PCUpmix *settings) {
     if (a.lfe_low != b.lfe_low || a.lfe_high != b.lfe_high) return 1;   // not a runtime option
     int r = 0;
     if (a.bass != b.bass) r |= cmd(m, "bass@ub", "g", "%.2f", b.bass);
+    if (a.treble != b.treble) {
+        r |= cmd(m, "bass@ut", "g", "%.2f", -b.treble);
+        r |= cmd(m, "surround@us", "fl_in", "%.4f", b.treble_gain);
+        r |= cmd(m, "surround@us", "fr_in", "%.4f", b.treble_gain);
+    }
     if (a.angle != b.angle) r |= cmd(m, "surround@us", "angle", "%.2f", b.angle);
     if (a.fc_out != b.fc_out) r |= cmd(m, "surround@us", "fc_out", "%.3f", b.fc_out);
     if (a.front_x != b.front_x) {
