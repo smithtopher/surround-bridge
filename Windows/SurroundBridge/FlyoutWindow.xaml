@@ -85,7 +85,7 @@
             </Grid>
             <TextBlock Text="{Binding UpmixBlurb}" Style="{StaticResource CaptionText}" Margin="0,8,0,4" />
             <local:UpmixSliders Compact="True" Visibility="{Binding UpmixEnabled, Converter={StaticResource Vis}}" Margin="0,2,0,0" />
-            <local:ToneSliders Compact="True" Visibility="{Binding UpmixEnabled, Converter={StaticResource Vis}}" />
+            <local:ToneSliders Compact="True" Margin="0,2,0,0" />
 
             <Border Style="{StaticResource Rule}" Margin="0,10,0,6" />
 

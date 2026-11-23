@@ -191,7 +191,15 @@ scripts/build_ffmpeg*.sh   same as Surround Player's (static 9.0.2, avfilter wit
     the bitrate row hides). Live 2026-11-23, VB-Cable → the Samsung over NVIDIA HDMI: exclusive 6 ch
     int 24-bit (in 32) 48 kHz accepted, ~107 ms estimated; 6 gaps in the first ~8 s, none after.
 - **Tone (`PCUpmix.treble_db`, Mac 1.2.0):** a treble high shelf (6 kHz) next to the bass shelf
-  (100 Hz), both before the surround filter, so they only work with the upmix on.
+  (100 Hz), both before the surround filter.
+  - **Without the upmix too (Windows 1.2.0, 2026-11-23):** multichannel input and stereo with the
+    upmix off go through `pc_tone_create` (pc_upmix.c, back from Surround Player 1.4.0): bass →
+    −T low shelf → alimiter level_in +T (latency-compensated) → aformat, in the output layout
+    and format. `tone_fifo` in bridge.c, between swr and the fifo. Flat = no graph (bit-exact).
+    Mid-stream it's created flat and ramps 1 dB per chunk (a cold filter on a running signal
+    clicked); ramped back to flat it's freed. At the stream start it starts at the settings.
+    `latency_ms` adds 5 ms while it runs (the limiter lookahead). regress "tone without the
+    upmix" (levels, flat bit-exact, sample count, AC3/DTS, `sbridge file --tone-toggle-ms`).
   - Our FFmpeg has no `treble` filter, so it's a second `bass` (low shelf) of −T dB plus +T dB of
     gain via surround's `fl_in`/`fr_in`. That's exactly a high shelf of +T in FFmpeg's SVF biquads
     (same poles, mix coefficients × A²). Surround's `level_in` does NOT work for this: the
@@ -200,6 +208,7 @@ scripts/build_ffmpeg*.sh   same as Surround Player's (static 9.0.2, avfilter wit
     image. Q 0.7 shelves overshoot ~0.3 dB.
   - The app keeps tone (bass + treble) out of the presets: a preset no longer sets bass (Wide used
     to set +3), so a loudness curve survives mode changes. Key `upmixTrebleDb`.
+  - The tone sliders are enabled whatever the upmix mode (1.2.0; they used to be disabled with it off).
   - Windows (1.1.0): `ToneSliders.xaml` (compact in the flyout, full in Settings ▸ Upmix ▸ Tone),
     `UpmixSettings.TrebleDb`; `BridgeModel.BassDb/TrebleDb` set the upmix without switching to Custom;
     the presets in Upmix.cs no longer touch bass. Native.cs PCUpmix must match the C struct.

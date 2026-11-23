@@ -169,5 +169,66 @@ print(("ok " if ok else "BAD ") + "60 Hz %+.1f, 1 kHz %+.1f, 12 kHz %+.1f dB" % 
     [ -n "${tl:-}" ] && tonecheck "loudness (bass +9, treble +9)" "$tl" "8.0,10.0 -1.0,1.0 8.0,10.0"
 }
 
+echo "tone without the upmix: native 5.1 and plain stereo (PCM), and encoded"
+cat > "$W/tonen.py" <<'EOF'
+# level (dB) at given frequencies summed over some channels of an f32le dump, seconds 2..4
+import sys, math
+from array import array
+a = array('f'); a.frombytes(open(sys.argv[1], 'rb').read()); ch = int(sys.argv[2]); rate = 48000
+chans = [int(c) for c in sys.argv[3].split(',')]
+seg = a[2 * rate * ch: 4 * rate * ch]; m = len(seg) // ch
+out = []
+for f in map(float, sys.argv[4:]):
+    w = 2 * math.pi * f / rate; e = 0.0
+    for c in chans:
+        x = seg[c::ch]
+        re = math.fsum(x[i] * math.cos(w * i) for i in range(m)); im = math.fsum(x[i] * math.sin(w * i) for i in range(m))
+        e += (re * re + im * im) / (m * m)
+    out.append('%.2f' % (10 * math.log10(e) if e > 0 else -150))
+print(' '.join(out))
+EOF
+TN="0.1*sin(2*PI*60*t)+0.1*sin(2*PI*1000*t)+0.1*sin(2*PI*12000*t)"
+ff -f lavfi -i "aevalsrc=$TN|$TN|$TN|$TN|$TN|$TN:s=48000:d=6:c=5.1(side)" -t 6 -c:a flac "$W/tn6.flac"
+tone_set() { # label source args channel-count channels
+    local base t b l
+    run "$2" "$W/q0.raw" $3 && base=$("$PY" -I "$W/tonen.py" "$W/q0.raw" $4 $5 60 1000 12000) || return
+    run "$2" "$W/qt.raw" $3 --upmix-set treble=6 && t=$("$PY" -I "$W/tonen.py" "$W/qt.raw" $4 $5 60 1000 12000)
+    run "$2" "$W/qb.raw" $3 --upmix-set bass=6 && b=$("$PY" -I "$W/tonen.py" "$W/qb.raw" $4 $5 60 1000 12000)
+    run "$2" "$W/ql.raw" $3 --upmix-set bass=9,treble=9 && l=$("$PY" -I "$W/tonen.py" "$W/ql.raw" $4 $5 60 1000 12000)
+    t0=$base
+    [ -n "${t:-}" ] && tonecheck "$1 treble +6 dB" "$t" "-0.7,0.7 -0.7,0.9 5.0,6.8"
+    [ -n "${b:-}" ] && tonecheck "$1 bass +6 dB" "$b" "5.0,6.8 -0.7,0.7 -0.7,0.7"
+    [ -n "${l:-}" ] && tonecheck "$1 loudness (bass +9, treble +9)" "$l" "8.0,10.0 -1.0,1.0 8.0,10.0"
+}
+tone_set "native 5.1" "$W/tn6.flac" "--pcm" 6 0,1,2,4,5
+tone_set "stereo, upmix off" "$W/tones.flac" "--pcm --no-upmix" 2 0,1
+# flat tone: no graph, bit-identical; boosted: no samples lost or added, channels in place
+run "$W/six.flac" "$W/f0.raw" --pcm && run "$W/six.flac" "$W/f1.raw" --pcm --upmix-set bass=0,treble=0 && {
+    cmp -s "$W/f0.raw" "$W/f1.raw" && pass "tone flat: bit-identical to no tone" || fail "tone flat: output differs"
+}
+run "$W/six.flac" "$W/f2.raw" --pcm --upmix-set treble=6 && {
+    [ "$(wc -c < "$W/f2.raw")" = "$(wc -c < "$W/f0.raw")" ] && pass "tone: no samples lost or added ($(wc -c < "$W/f2.raw") bytes)" \
+        || fail "tone: $(wc -c < "$W/f2.raw") bytes, want $(wc -c < "$W/f0.raw")"
+    r=$("$PY" -I "$W/rawfreqs.py" "$W/f2.raw" 6)
+    [ "${r#* }" = "300.0 500.0 700.0 60.0 1100.0 1300.0" ] && pass "tone 5.1: channels in place (${r#* })" || fail "tone 5.1: '$r'"
+}
+# encoded: 5.1 AC3 (planar float) and DTS (packed s32), and stereo AC3 with the upmix off
+run "$W/six.flac" "$W/e1.spdif" --upmix-set bass=6,treble=6 && stream "tone 5.1 ac3" "$W/e1.spdif" ac3 "5.1(side)" 6144
+run "$W/six.flac" "$W/e2.spdif" --dts --upmix-set bass=6,treble=6 && stream "tone 5.1 dts" "$W/e2.spdif" dts "5.1(side)" 2048
+run "$W/centre.flac" "$W/e3.spdif" --no-upmix --upmix-set bass=6,treble=6 && stream "tone stereo ac3" "$W/e3.spdif" ac3 stereo 6144
+# switched on and off while it runs (real-time input): no click (a filter started cold on a
+# running signal spiked to 2.5x), nothing lost
+ff -f lavfi -i "aevalsrc=0.25*sin(2*PI*1000*t)|0.25*sin(2*PI*1000*t):s=48000:d=6" -t 6 -c:a flac "$W/tg.flac"
+run "$W/tg.flac" "$W/tg.raw" --realtime --pcm --no-upmix --upmix-set bass=12,treble=12 --tone-toggle-ms 150 && {
+    r=$("$PY" -I -c "
+import sys
+from array import array
+a = array('f'); a.frombytes(open(sys.argv[1], 'rb').read()); x = a[0::2]
+step = max(abs(x[i] - x[i - 1]) for i in range(1000, len(x)))
+print(('ok ' if abs(len(x) - 288000) <= 1536 and step < 0.05 else 'BAD ') + '%d frames, largest step %.4f (the sine alone: 0.033)' % (len(x), step))" "$W/tg.raw")
+    n=$(grep -o '^tone toggles: [0-9]*' "$W/log.txt" | grep -o '[0-9]*$')
+    case "$r" in ok*) pass "tone toggled live ${n}x: ${r#ok }";; *) fail "tone toggled live: ${r#BAD }";; esac
+}
+
 [ $FAIL = 0 ] && echo "ALL PASSED" || echo "SOME CHECKS FAILED"
 exit $FAIL

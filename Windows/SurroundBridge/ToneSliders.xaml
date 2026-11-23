@@ -1,9 +1,8 @@
-<!-- Bass and treble boost (the Mac app's ToneSliders): shelves before the upmix (100 Hz, 6 kHz).
-     Not part of the upmix presets. Disabled while the upmix is off. DataContext: BridgeModel. -->
+<!-- Bass and treble boost (the Mac app's ToneSliders): shelves at 100 Hz and 6 kHz on everything
+     (upmixed or not). Not part of the upmix presets. DataContext: BridgeModel. -->
 <UserControl x:Class="SurroundBridge.ToneSliders"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             IsEnabled="{Binding UpmixEnabled}">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition x:Name="LabelCol" Width="88" />

@@ -98,7 +98,9 @@ int main(int argc, char **argv) {
                         "                    (--input-file: F at real time, e.g. silent media to test a device;\n"
                         "                     --dump: write the IEC 61937 stream to F instead of a device, to test the capture side)\n"
                         "       sbridge file <media> <out.spdif> [--realtime] [--dts] [--no-upmix] [--upmix-set k=v,...]\n"
-                        "DEV: a UID or part of the device name. Upmix keys: surround center width lfe xover move bass delay highcut\n");
+                        "DEV: a UID or part of the device name. Upmix keys: surround center width lfe xover move bass treble delay\n"
+                        "highcut (bass and treble also apply with --no-upmix). file --tone-toggle-ms N: switch bass/treble\n"
+                        "between the set values and flat every N ms (a test)\n");
         return 1;
     }
     if (!strcmp(argv[1], "devices")) { list_devices(); return 0; }
@@ -112,6 +114,7 @@ int main(int argc, char **argv) {
                    .crossover_hz = 100, .lfe_move = 0, .bass_db = 0, .rear_delay_ms = 10, .rear_highcut_hz = 7000 };
     const char *in_want = NULL, *out_want = NULL;   // NULL: OWN_INPUT if present, else DEFAULT_INPUT
     double seconds = 0;
+    int tone_toggle_ms = 0;
     int first = file ? 4 : 2;
     if (file) { cfg.input_file = argv[2]; cfg.dump_path = argv[3]; }
     for (int i = first; i < argc; i++) {
@@ -123,6 +126,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-upmix")) up.enabled = 0;
         else if (!strcmp(argv[i], "--upmix-set") && i + 1 < argc) parse_upmix(argv[++i], &up);
         else if (!strcmp(argv[i], "--seconds") && i + 1 < argc) seconds = atof(argv[++i]);
+        else if (file && !strcmp(argv[i], "--tone-toggle-ms") && i + 1 < argc) tone_toggle_ms = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--realtime")) cfg.input_realtime = 1;
         else if (!strcmp(argv[i], "--input-file") && i + 1 < argc) { cfg.input_file = argv[++i]; cfg.input_realtime = 1; }
         else if (!strcmp(argv[i], "--buffer-ms") && i + 1 < argc) cfg.target_buffer_ms = atof(argv[++i]);
@@ -173,6 +177,20 @@ int main(int argc, char **argv) {
     sb_bridge_status(b, &st);
     printf("input:  %s\noutput: %s\n", st.input, st.output);
     if (file) {
+        if (tone_toggle_ms > 0) {   // test: tone on and off while it runs
+            int toggles = 0, flat = 0;
+            for (;;) {
+                pc_sleep_us(tone_toggle_ms * 1000);
+                sb_bridge_status(b, &st);
+                if (!st.running) break;
+                PCUpmix u = up;
+                flat = !flat;
+                if (flat) u.bass_db = u.treble_db = 0;
+                sb_bridge_set_upmix(b, &u);
+                toggles++;
+            }
+            printf("tone toggles: %d\n", toggles);
+        }
         sb_bridge_wait(b);
         sb_bridge_destroy(b);
         printf("done\n");

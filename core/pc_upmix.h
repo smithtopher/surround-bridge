@@ -1,5 +1,6 @@
-// PORTABLE: stereo -> 5.1 upmix (FFmpeg's "surround" filter plus bass shelf, rear delay, rear
-// high-cut and a limiter) as a libavfilter graph. No OS code.
+// PORTABLE: stereo -> 5.1 upmix (FFmpeg's "surround" filter plus bass and treble shelves, rear
+// delay, rear high-cut and a limiter) as a libavfilter graph, and the tone shelves alone for
+// audio that isn't upmixed (pc_tone_create). No OS code.
 //
 // Timing: output sample k corresponds to input sample k - pc_upmix_latency() (the surround
 // filter's half window); the caller restamps. The graph only emits whole hops, so to get the
@@ -24,8 +25,19 @@ void pc_upmix_free(PCUpmixer **m);
 // be rebuilt (the bass crossover is fixed at creation), -1 on error.
 int pc_upmix_update(PCUpmixer *m, const PCUpmix *u);
 
-// Feed `n` stereo planar float samples (data[0] = L, data[1] = R).
-int pc_upmix_send(PCUpmixer *m, const float *const *data, int n);
+// Tone only: bass + treble shelves and the limiter, `layout` / `fmt` in and out, no latency
+// (output sample k = input sample k). Settings apply live through pc_upmix_update.
+PCUpmixer *pc_tone_create(const PCUpmix *u, int rate, const AVChannelLayout *layout,
+                          enum AVSampleFormat fmt, char *err, int errlen);
+// 1 if the settings boost anything (a tone graph is worth running).
+int pc_tone_wanted(const PCUpmix *u);
+
+// Feed `n` samples: stereo planar float for an upmixer (data[0] = L, data[1] = R), the
+// created layout / format for a tone graph.
+int pc_upmix_send(PCUpmixer *m, uint8_t *const *data, int n);
+// End of input: pc_upmix_receive then returns what's left, then AVERROR_EOF. The graph takes
+// nothing more after this.
+int pc_upmix_end(PCUpmixer *m);
 // Next output frame, or AVERROR(EAGAIN) when it needs more input.
 int pc_upmix_receive(PCUpmixer *m, AVFrame *out);
 

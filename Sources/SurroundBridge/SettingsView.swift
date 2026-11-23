@@ -82,7 +82,7 @@ struct UpmixSettingsView: View {
             } header: { Text("Stereo Upmix") }
             Section {
                 ToneSliders(compact: false)
-                note("Turn both up for listening at low volume: quiet sound loses bass first, and treble too, to the ear (the Fletcher-Munson curves). Tone stays as you set it when you change the upmix mode, and works while the upmix is on.")
+                note("Turn both up for listening at low volume: quiet sound loses bass first, and treble too, to the ear (the Fletcher-Munson curves). It works on everything: upmixed stereo, plain stereo with the upmix off and 5.1 from apps that output it, before the sound goes to any output. Tone stays as you set it when you change the upmix mode.")
             } header: { Text("Tone") }
         }
         .formStyle(.grouped)
@@ -126,20 +126,18 @@ struct UpmixBindings {
     }
 }
 
-/// Bass and treble boost: shelves before the upmix (100 Hz and 6 kHz). Not part of the presets.
+/// Bass and treble boost: shelves at 100 Hz and 6 kHz on everything, upmixed or not (the engine
+/// runs them on stereo with the upmix off and on multichannel input too). Not part of the presets.
 struct ToneSliders: View {
     @EnvironmentObject var model: BridgeModel
     let compact: Bool
 
     var body: some View {
         let b = UpmixBindings(model: model)
-        let on = model.upmix.enabled
         Group {
             ToneRow(title: "Bass boost", value: b.up(\.bassDb, custom: false), compact: compact)
             ToneRow(title: "Treble boost", value: b.up(\.trebleDb, custom: false), compact: compact)
         }
-        .disabled(!on)
-        .help(on ? "" : "Tone works while the upmix is on")
     }
 }
 

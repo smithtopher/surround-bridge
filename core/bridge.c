@@ -62,6 +62,10 @@ struct SBBridge {
     SwrContext *swr;
     PCUpmixer *um;
     int um_gen, upmixing;
+    // tone (bass/treble) for what isn't upmixed (multichannel input, or stereo with the upmix off)
+    PCUpmixer *tone;                     // NULL while tone is flat (straight through, bit-exact)
+    int tone_gen;                        // upmix_gen it was set up for; -1: the stream's start
+    PCUpmix tone_want, tone_now;         // the settings, and what the graph has (ramping toward them)
     AVAudioFifo *fifo;
     AVChannelLayout enc_layout;
     int64_t comp_next;                   // output sample count of the next drift update
@@ -293,9 +297,71 @@ static int send_bursts(SBBridge *b, int serial) {
     return r;
 }
 
-// Converted (48 kHz, planar) samples into the encoder fifo, through the upmix when it's on.
+#define TONE_RAMP_DB 1.0f   // per worker chunk (~21 ms): 0 -> 12 dB in a quarter of a second
+
+static float tone_step(float now, float want) {
+    return fabsf(want - now) <= TONE_RAMP_DB ? want : now + (want > now ? TONE_RAMP_DB : -TONE_RAMP_DB);
+}
+
+static void tone_pull(SBBridge *b) {
+    AVFrame *f = av_frame_alloc();
+    if (!f) return;
+    while (pc_upmix_receive(b->tone, f) >= 0) {
+        av_audio_fifo_write(b->fifo, (void **)f->extended_data, f->nb_samples);
+        av_frame_unref(f);
+    }
+    av_frame_free(&f);
+}
+
+// Tone ramped back to flat, or the end of a file input: let the graph's last samples out.
+static void tone_end(SBBridge *b) {
+    if (!b->tone) return;
+    if (pc_upmix_end(b->tone) == 0) tone_pull(b);
+    pc_upmix_free(&b->tone);
+}
+
+// What isn't upmixed: the tone shelves when they boost anything (same filters as the upmix's,
+// in the output's own layout; no latency apart from the limiter's 5 ms lookahead), else
+// straight into the fifo. Mid-stream the graph starts flat and ramps a step per chunk to the
+// settings, since a filter started cold on a running signal clicks (Surround Player 1.4.0).
+static int tone_fifo(SBBridge *b, uint8_t **data, int n) {
+    int gen = atomic_load(&b->upmix_gen), created = 0;
+    if (gen != b->tone_gen) {
+        int fresh = b->tone_gen == -1;
+        b->tone_gen = gen;
+        PCUpmix u = upmix_settings(b);
+        b->tone_want = u;
+        if (!b->tone && pc_tone_wanted(&u)) {
+            PCUpmix start = u;
+            if (!fresh) start.bass_db = start.treble_db = 0;
+            char e[256] = "";
+            b->tone = pc_tone_create(&start, 48000, &b->enc_layout, b->fmt, e, sizeof(e));
+            b->tone_now = start;
+            created = b->tone != NULL;
+        }
+    }
+    if (created) {
+        // this first chunk goes through as it started
+    } else if (b->tone && (b->tone_now.bass_db != b->tone_want.bass_db || b->tone_now.treble_db != b->tone_want.treble_db)) {
+        b->tone_now.bass_db = tone_step(b->tone_now.bass_db, b->tone_want.bass_db);
+        b->tone_now.treble_db = tone_step(b->tone_now.treble_db, b->tone_want.treble_db);
+        if (pc_upmix_update(b->tone, &b->tone_now) != 0) pc_upmix_free(&b->tone);
+    } else if (b->tone && !pc_tone_wanted(&b->tone_now)) {
+        tone_end(b);
+    }
+    if (!b->tone) return av_audio_fifo_write(b->fifo, (void **)data, n) < n ? -1 : 0;
+    if (n > 0 && pc_upmix_send(b->tone, data, n) < 0) {   // allocation failure: carry on without tone
+        pc_upmix_free(&b->tone);
+        return av_audio_fifo_write(b->fifo, (void **)data, n) < n ? -1 : 0;
+    }
+    tone_pull(b);
+    return 0;
+}
+
+// Converted (48 kHz) samples into the encoder fifo, through the upmix when it's on, else
+// through the tone shelves.
 static int to_fifo(SBBridge *b, uint8_t **data, int n) {
-    if (!b->upmixing) return av_audio_fifo_write(b->fifo, (void **)data, n) < n ? -1 : 0;
+    if (!b->upmixing) return tone_fifo(b, data, n);
     int gen = atomic_load(&b->upmix_gen);
     if (gen != b->um_gen) {
         PCUpmix u = upmix_settings(b);
@@ -307,7 +373,7 @@ static int to_fifo(SBBridge *b, uint8_t **data, int n) {
         }
         b->um_gen = gen;
     }
-    if (n > 0 && pc_upmix_send(b->um, (const float *const *)data, n) < 0) return -1;
+    if (n > 0 && pc_upmix_send(b->um, data, n) < 0) return -1;
     AVFrame *f = av_frame_alloc();
     while (pc_upmix_receive(b->um, f) >= 0) {
         av_audio_fifo_write(b->fifo, (void **)f->extended_data, f->nb_samples);
@@ -468,6 +534,7 @@ static void *worker_thread(void *arg) {
                 av_freep(&sil[0]); av_freep(&sil);
             }
         }
+        tone_end(b);
         int left = b->pcm ? 0 : av_audio_fifo_size(b->fifo) % pc_enc_frame_size(b->enc);
         if (left) {
             int pad = pc_enc_frame_size(b->enc) - left;
@@ -606,6 +673,7 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
         if (!b->um) goto fail;
         b->um_gen = atomic_load(&b->upmix_gen);
     }
+    b->tone_gen = -1;   // the worker sets up tone with the first chunk
     b->fifo = av_audio_fifo_alloc(b->fmt, b->enc_layout.nb_channels, b->pcm ? CHUNK * 2 : pc_enc_frame_size(b->enc) * 4);
 
     char lay[64] = "";
@@ -654,6 +722,7 @@ void sb_bridge_stop(SBBridge *b) {
     if (b->out) { pc_out_close(b->out); b->out = NULL; }   // restores the device (hog, format)
     pc_enc_close(&b->enc);
     pc_upmix_free(&b->um);
+    pc_upmix_free(&b->tone);
     swr_free(&b->swr);
     if (b->fifo) { av_audio_fifo_free(b->fifo); b->fifo = NULL; }
     avcodec_free_context(&b->idec);
@@ -680,7 +749,7 @@ void sb_bridge_status(SBBridge *b, SBStatus *st) {
     st->jumps = atomic_load(&b->jumps);
     st->gaps = b->out ? pc_out_gaps(b->out) : 0;
     st->target_ms = b->target_locked ? b->target * 1000 : 0;
-    double lat = b->capfmt.latency + (b->upmixing ? 2048 / 48000.0 : 0) + (CHUNK / 2) / (b->in_rate > 0 ? b->in_rate : 48000)
+    double lat = b->capfmt.latency + (b->upmixing ? 2048 / 48000.0 : b->tone ? 0.005 : 0) + (CHUNK / 2) / (b->in_rate > 0 ? b->in_rate : 48000)
                + (b->enc ? pc_enc_frame_size(b->enc) / 48000.0 : 0) + atomic_load(&b->st_fill)
                + (b->out && !b->cfg.dump_path ? pc_out_latency(b->out) : 0);
     st->latency_ms = lat * 1000;

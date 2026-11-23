@@ -41,6 +41,8 @@ library repo (git submodule) instead.
   Its engine.c runs it for native multichannel and for stereo with the upmix off (`tone_deliver`:
   created flat and ramped mid-stream, since a cold filter on a running signal clicks). The bridge
   could do the same for native 5.1 input; its pc_upmix.c is otherwise identical (copy it back,
-  keeping `#include "pc_types.h"`, and update bridge.c's `pc_upmix_send` call).
+  keeping `#include "pc_types.h"`, and update bridge.c's `pc_upmix_send` call). **Done
+  2026-11-23** (bridge Windows 1.2.0: `tone_fifo` in bridge.c); `core/pc_upmix.c` is the player's
+  again, byte for byte, and `pc_upmix.h` differs only in its include.
 - **2026-11-23, pc_output.c:** `pc_out_gaps` (added by the Windows side) now also counts PCM
   underruns (`starved`, one per gap).

@@ -155,8 +155,8 @@ struct UpmixQuickControls: View {
             Text(model.upmix.mode.blurb).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if model.upmix.enabled {
                 UpmixSliders(compact: true)
-                ToneSliders(compact: true)
             }
+            ToneSliders(compact: true)
         }
     }
 }

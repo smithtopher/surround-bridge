@@ -1,5 +1,13 @@
 # Changelog
 
+## [Windows 1.2.0] — 2026-11-23 (the Mac code is updated but not yet built)
+
+- **Bass and treble boost work on everything now**, not only while the upmix is on: plain stereo
+  with the upmix off and 5.1 from apps that output it get the same shelves, before the sound goes
+  to Dolby Digital, DTS or multichannel PCM. Turning tone on or off while it plays fades in and
+  out over about a quarter of a second, with no click. With both at Off the sound is unchanged
+  bit for bit.
+
 ## [Windows 1.1.0] — 2026-11-23
 
 The Mac 1.2.0 features, on Windows:
