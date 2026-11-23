@@ -17,7 +17,7 @@ and the [changelog](https://github.com/smithtopher/surround-bridge/blob/main/CHA
 
 | File | Version | Built from | SHA-256 |
 |---|---|---|---|
-| [macOS/SurroundBridge-1.1.0.pkg](macOS/SurroundBridge-1.1.0.pkg) | 1.1.0 | main 6f8c490 | `b7395128c62fe6b9c7dae63019a68c54d74a486fbf77f04d093fe8204f52d9d2` |
+| [macOS/SurroundBridge-1.2.0.pkg](macOS/SurroundBridge-1.2.0.pkg) | 1.2.0 | main eee1ef9 | `bf5eccdb08255c7b91025fa8c08b8690cce2af6958d436b45fe1c87b2f72310d` |
 
 macOS 14+, Apple Silicon and Intel (universal), 16 MB. It installs the app in Applications and the
 **Surround Bridge audio device** (built from BlackHole 0.7.1's GPL-3 source, see
