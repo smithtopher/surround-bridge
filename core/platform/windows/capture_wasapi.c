@@ -17,6 +17,7 @@
 #include <mmreg.h>
 #include <propidl.h>
 #include <avrt.h>
+#include <mmsystem.h>   // timeBeginPeriod
 
 #include "../../pc_capture.h"
 #include "../../pc_platform.h"
@@ -24,8 +25,14 @@
 #include <stdio.h>
 #include <string.h>
 
-#define CAP_BUFFER_HNS 200000          // 20 ms shared-mode buffer
+#define CAP_BUFFER_HNS 1000000         // 100 ms shared-mode buffer: room for a late wake-up (no added delay:
+                                       // we take packets as they arrive)
 #define CAP_POLL_MS 3                  // poll interval (packets are 10 ms in shared mode)
+// Waits and Sleep() only have the system timer's resolution, 15.6 ms by default, and since Windows 10
+// 2004 a process's timeBeginPeriod only applies to itself. At 15.6 ms the poll (and the worker's 1 ms
+// sleep in bridge.c) fell so far behind that the output ran short about twice a second: a 32 ms
+// silence burst each time, i.e. stutter. sbridge set 1 ms itself; the app didn't. So the capture
+// sets it while it runs.
 #define LOOPBACK_PREFIX "loopback:"
 
 #define KSGUID_(x) {x, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}}
@@ -53,6 +60,7 @@ struct PCCapture {
     int zeros_frames;
     PCCaptureCallback cb;
     void *ctx;
+    int timer_1ms;                   // timeBeginPeriod(1) held (see CAP_POLL_MS)
 };
 
 // Same as audio_wasapi.c: keep the process MTA alive so COM works from any thread.
@@ -288,6 +296,8 @@ int pccap_start(PCCapture *c, PCCaptureCallback cb, void *ctx) {
     c->ctx = ctx;
     if (c->sil_client && FAILED(IAudioClient_Start(c->sil_client))) { RELEASE(c->sil_rc); RELEASE(c->sil_client); }
     if (FAILED(IAudioClient_Start(c->client))) return -1;
+    timeBeginPeriod(1);
+    c->timer_1ms = 1;
     c->thread = CreateThread(NULL, 0, capture_thread, c, 0, NULL);
     if (!c->thread) { IAudioClient_Stop(c->client); return -1; }
     return 0;
@@ -308,6 +318,7 @@ void pccap_close(PCCapture *c) {
     RELEASE(c->sil_client);
     RELEASE(c->dev);
     if (c->stop) CloseHandle(c->stop);
+    if (c->timer_1ms) timeEndPeriod(1);
     free(c->zeros);
     free(c);
 }

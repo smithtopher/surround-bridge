@@ -42,6 +42,7 @@ typedef struct {
     double target_ms;           // the buffer level being held (0 until it locks, 2 s after audio starts)
     float peak_db[8];           // input peak level per channel over the last ~0.5 s (-120 = silence)
     int channels;
+    long long gaps;             // output underruns: a silence burst played in place of audio (audible)
 } SBStatus;
 
 PC_API SBBridge *sb_bridge_create(void);

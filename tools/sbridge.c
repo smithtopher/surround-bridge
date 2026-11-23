@@ -183,8 +183,8 @@ int main(int argc, char **argv) {
         pc_sleep_us(1000000);
         sb_bridge_status(b, &st);
         if (cfg.input_file && !st.running) break;
-        printf("buffer %5.1f ms (target %4.1f)  drift %+7.1f ppm  latency ~%3.0f ms  overruns %lld  jumps %lld  peak L %5.1f R %5.1f dB\n",
-               st.buffer_ms, st.target_ms, st.drift_ppm, st.latency_ms, st.overruns, st.jumps, st.peak_db[0],
+        printf("buffer %5.1f ms (target %4.1f)  drift %+7.1f ppm  latency ~%3.0f ms  overruns %lld  jumps %lld  gaps %lld  peak L %5.1f R %5.1f dB\n",
+               st.buffer_ms, st.target_ms, st.drift_ppm, st.latency_ms, st.overruns, st.jumps, st.gaps, st.peak_db[0],
                st.channels > 1 ? st.peak_db[1] : -120.f);
     }
     sb_bridge_destroy(b);   // stops and restores the output device

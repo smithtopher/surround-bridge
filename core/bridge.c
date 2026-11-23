@@ -576,6 +576,7 @@ void sb_bridge_status(SBBridge *b, SBStatus *st) {
     st->drift_ppm = atomic_load(&b->st_ppm);
     st->overruns = atomic_load(&b->overruns);
     st->jumps = atomic_load(&b->jumps);
+    st->gaps = b->out ? pc_out_gaps(b->out) : 0;
     st->target_ms = b->target_locked ? b->target * 1000 : 0;
     double lat = b->capfmt.latency + (b->upmixing ? 2048 / 48000.0 : 0) + (CHUNK / 2) / (b->in_rate > 0 ? b->in_rate : 48000)
                + (b->enc ? pc_enc_frame_size(b->enc) / 48000.0 : 0) + atomic_load(&b->st_fill)

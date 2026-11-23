@@ -1,5 +1,13 @@
 # Changelog
 
+## [Windows 1.0.1] — 2026-11-23
+
+- **Fixed: stuttery playback.** Windows' default timer is too coarse (15.6 ms) for reading the
+  virtual cable every few milliseconds, so audio arrived late and the output filled the holes with
+  silence about twice a second. The capture now sets a 1 ms timer while it runs and keeps a 100 ms
+  capture buffer. Measured with the TV: from ~50 dropouts in 30 s to none after start-up.
+- `sbridge` shows `gaps`: output underruns (a silence burst played in place of audio).
+
 ## [1.1.0] — 2026-11-23 (macOS)
 
 - **Its own audio device:** the installer now adds the **Surround Bridge** audio device (2 channels,

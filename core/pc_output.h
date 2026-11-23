@@ -47,6 +47,8 @@ void pc_out_flush(PCOut *o);
 void pc_out_set_paused(PCOut *o, int paused);
 double pc_out_buffered_seconds(PCOut *o); // ring contents only
 double pc_out_latency(PCOut *o);
+// Bitstream: keep-alive silence bursts played after real data started (underruns, audible gaps).
+long long pc_out_gaps(PCOut *o);
 // Presentation timestamp of the audio currently leaving the device (NAN if unknown).
 double pc_out_clock(PCOut *o);
 void pc_out_debug(PCOut *o);

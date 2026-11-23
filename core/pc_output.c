@@ -39,6 +39,8 @@ struct PCOut {
     uint8_t silence[PC_MAX_BURST_BYTES];
     int burst;                      // bitstream burst size in bytes
     _Atomic int have_silence;
+    int played_real;                // a real burst has played (render callback only)
+    _Atomic long long gaps;         // silence bursts played after real data started: underruns
     // clock record, written by the render callback (seqlock)
     _Atomic uint32_t seq;
     _Atomic int64_t rec_pos, rec_len;
@@ -161,9 +163,10 @@ static void render(void *ctx, uint8_t *dst, int frames, int64_t present_ns) {
                 if (o->bs_phase >= o->burst) { o->bs_phase = 0; o->bs_state = BS_BOUNDARY; }
             } else {
                 if (!paused && w - r >= o->burst) {
-                    o->bs_state = BS_REAL; o->bs_phase = 0;
+                    o->bs_state = BS_REAL; o->bs_phase = 0; o->played_real = 1;
                 } else if (atomic_load_explicit(&o->have_silence, memory_order_acquire)) {
                     o->bs_state = BS_SILENCE; o->bs_phase = 0;
+                    if (o->played_real && !paused) atomic_fetch_add_explicit(&o->gaps, 1, memory_order_relaxed);
                 } else {
                     memset(dst + done * dbpf, 0, (size_t)left * dbpf);
                     done = frames;
@@ -360,6 +363,8 @@ double pc_out_buffered_seconds(PCOut *o) {
     int64_t w = atomic_load(&o->wpos), r = atomic_load(&o->rpos);
     return (double)(w - r) / o->bps;
 }
+
+long long pc_out_gaps(PCOut *o) { return o ? atomic_load(&o->gaps) : 0; }
 
 double pc_out_latency(PCOut *o) { return o->file ? 0 : o->fmt.latency; }
 

@@ -46,11 +46,18 @@ docs/PLAN.md the roadmap.
 - `sbridge` on Windows: default input "CABLE Output" (VB-Audio Virtual Cable), `timeBeginPeriod(1)`,
   refuses an input that is the loopback of the output itself (feedback). `run --dump F` writes the
   live stream to a file instead of a device (tests capture without touching the TV).
-- **Not yet tested:** VB-Cable (not installed on this PC: the only endpoint is the Samsung over
-  NVIDIA HDMI, which offers AC3 bitstream; over Remote Desktop only "Remote Audio" exists), the live
-  capture → exclusive HDMI path, drift control against a real cable clock, hot-plug, the app's
-  default-output switching (IPolicyConfig) on real devices, the VB-Cable download/signature check
-  (the signer name match "VB-Audio"/"Burel" is a guess: check it on the first real install).
+- **Timer resolution (fixed in 1.0.1):** Sleep/waits default to 15.6 ms and, since Windows 10 2004,
+  `timeBeginPeriod` is per process. The app never set it, so the capture poll and the worker's 1 ms
+  sleep lagged and the output underran ~2/s (stutter); `sbridge` hid it by setting 1 ms itself. Now
+  `capture_wasapi.c` holds timeBeginPeriod(1) while running and uses a 100 ms capture buffer.
+  `SBStatus.gaps` / sbridge "gaps" = silence bursts played after real data started (1 at start-up is
+  normal). Live check 2026-11-23, VB-Cable → Samsung, silence played into CABLE Input: 51 gaps in
+  30 s before, 1 (start-up) in 40 s after.
+- **Tested live 2026-11-23:** VB-Cable installed; CABLE Output → Dolby Digital → Samsung over HDMI
+  (exclusive), drift control holding ~74 ms, IPolicyConfig default-output switching (test script).
+  The user ran 1.0.0 in the app and heard the stutter above. **Not yet tested:** hot-plug, music
+  through 1.0.1 by ear, the VB-Cable download/signature check (signer match "VB-Audio"/"Burel" is a
+  guess).
 
 ## App (Windows 1.0.0, 2026-11-22)
 - `Windows/SurroundBridge/` (C#, .NET 8, **WPF** + WinForms NotifyIcon; WPF because it starts fast
