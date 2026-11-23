@@ -6,7 +6,7 @@ Downloads only; the source is on [`main`](https://github.com/smithtopher/surroun
 
 | File | Version | Built from | SHA-256 |
 |---|---|---|---|
-| [Windows/SurroundBridge-Setup-1.0.1-windows-x64.exe](Windows/SurroundBridge-Setup-1.0.1-windows-x64.exe) | 1.0.1 | main 8686b73 | `7f6508c9b9339e259076e05182a2d81b3581dc91a68eff9f5b5434b4934e1cd4` |
+| [Windows/SurroundBridge-Setup-1.0.2-windows-x64.exe](Windows/SurroundBridge-Setup-1.0.2-windows-x64.exe) | 1.0.2 | main 97abdac | `4ba4541767adaecb91e267574a2d19b82e78b91a669a8768a2f8dda799275910` |
 
 Windows 10/11, 64-bit, ~70 MB, nothing else to install. Open it and click **Install** (per user,
 no administrator rights). It isn't code-signed yet: if SmartScreen warns, **More info** → **Run anyway**.
