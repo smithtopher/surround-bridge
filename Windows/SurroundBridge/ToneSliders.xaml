@@ -1,0 +1,28 @@
+<!-- Bass and treble boost (the Mac app's ToneSliders): shelves before the upmix (100 Hz, 6 kHz).
+     Not part of the upmix presets. Disabled while the upmix is off. DataContext: BridgeModel. -->
+<UserControl x:Class="SurroundBridge.ToneSliders"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             IsEnabled="{Binding UpmixEnabled}">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="LabelCol" Width="88" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition x:Name="ValueCol" Width="78" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="30" />
+            <RowDefinition Height="30" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="BassTitle" Text="Bass" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
+        <Slider Grid.Column="1" Minimum="0" Maximum="12" TickFrequency="0.5" SmallChange="0.5" LargeChange="2"
+                Value="{Binding BassDb}" ToolTip="Bass boost: a shelf below 100 Hz." AutomationProperties.Name="Bass boost" />
+        <TextBlock Grid.Column="2" Text="{Binding BassLabel}" Style="{StaticResource ValueText}" />
+
+        <TextBlock x:Name="TrebleTitle" Grid.Row="1" Text="Treble" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
+        <Slider Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="12" TickFrequency="0.5" SmallChange="0.5" LargeChange="2"
+                Value="{Binding TrebleDb}" ToolTip="Treble boost: a shelf above 6 kHz." AutomationProperties.Name="Treble boost" />
+        <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding TrebleLabel}" Style="{StaticResource ValueText}" />
+    </Grid>
+</UserControl>

@@ -44,7 +44,7 @@ Everything applies while it plays.
 
 ## Install (Windows 10/11, 64-bit)
 
-1. Open **SurroundBridge-Setup-1.0.0-windows-x64.exe**. It isn't code-signed yet, so Windows
+1. Open **SurroundBridge-Setup-1.1.0-windows-x64.exe**. It isn't code-signed yet, so Windows
    SmartScreen may warn the first time: **More info** → **Run anyway**.
 2. Click **Install**. It installs for your account only (no administrator password), adds a Start menu
    shortcut, and starts. Surround Bridge lives in the **notification area** of the taskbar (the
@@ -57,8 +57,9 @@ Everything applies while it plays.
 
 While it's on, Windows' sound output points at the cable ("CABLE Input"), and everything plays
 through your amp as Dolby Digital (or DTS) 5.1. Switch it off and your previous output comes back.
-The settings and upmix controls are the same as on the Mac. If nothing reaches the amp, check that
-the HDMI/optical device allows exclusive mode (Sound settings ▸ the device ▸ Advanced).
+The settings, upmix and tone controls are the same as on the Mac, including **Multichannel PCM** for an
+AV receiver connected by HDMI. If nothing reaches the amp, check that the HDMI/optical device allows
+exclusive mode (Sound settings ▸ the device ▸ Advanced).
 
 **Uninstall:** Settings ▸ About ▸ Uninstall, or Windows Settings ▸ Apps ▸ Installed apps ▸ Surround
 Bridge. VB-Audio Virtual Cable stays (remove it with its own setup's "Remove Driver").

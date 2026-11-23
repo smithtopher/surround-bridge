@@ -1,5 +1,6 @@
 // Stereo upmix settings: the same modes, presets and ranges as the Mac app's Upmix.swift (and
-// Surround Player). The engine does the work (core/pc_upmix.c).
+// Surround Player). The engine does the work (core/pc_upmix.c). Tone (bass and treble boost) is a
+// listening preference kept out of the presets, so a loudness curve survives mode changes (Mac 1.2.0).
 using System.Text.Json.Serialization;
 
 namespace SurroundBridge;
@@ -15,7 +16,8 @@ public sealed record UpmixSettings
     public double LfeDb { get; init; } = -6;          // -40 = no LFE
     public int CrossoverHz { get; init; } = 100;
     public bool LfeMove { get; init; }                // false: copy bass to the sub; true: move it
-    public double BassDb { get; init; }
+    public double BassDb { get; init; }               // tone: not part of the presets
+    public double TrebleDb { get; init; }
     public double RearDelayMs { get; init; } = 10;
     public int RearHighcutHz { get; init; } = 7000;   // 0 = off
 
@@ -44,9 +46,9 @@ public sealed record UpmixSettings
     /// The sliders' values for a preset (the mode is left alone).
     public UpmixSettings WithPreset(UpmixMode p) => p switch
     {
-        UpmixMode.Music => this with { SurroundDb = -3, Center = 0.4, Width = 0.55, LfeDb = -6, CrossoverHz = 100, LfeMove = false, BassDb = 0, RearDelayMs = 10, RearHighcutHz = 7000 },
-        UpmixMode.Movies => this with { SurroundDb = -4, Center = 0.9, Width = 0.5, LfeDb = -3, CrossoverHz = 120, LfeMove = false, BassDb = 0, RearDelayMs = 15, RearHighcutHz = 7000 },
-        UpmixMode.Wide => this with { SurroundDb = 0, Center = 0.5, Width = 0.8, LfeDb = -3, CrossoverHz = 100, LfeMove = false, BassDb = 3, RearDelayMs = 5, RearHighcutHz = 12000 },
+        UpmixMode.Music => this with { SurroundDb = -3, Center = 0.4, Width = 0.55, LfeDb = -6, CrossoverHz = 100, LfeMove = false, RearDelayMs = 10, RearHighcutHz = 7000 },
+        UpmixMode.Movies => this with { SurroundDb = -4, Center = 0.9, Width = 0.5, LfeDb = -3, CrossoverHz = 120, LfeMove = false, RearDelayMs = 15, RearHighcutHz = 7000 },
+        UpmixMode.Wide => this with { SurroundDb = 0, Center = 0.5, Width = 0.8, LfeDb = -3, CrossoverHz = 100, LfeMove = false, RearDelayMs = 5, RearHighcutHz = 12000 },
         _ => this,
     };
 
@@ -63,5 +65,6 @@ public sealed record UpmixSettings
         bass_db = (float)BassDb,
         rear_delay_ms = (float)RearDelayMs,
         rear_highcut_hz = RearHighcutHz,
+        treble_db = (float)TrebleDb,
     };
 }

@@ -11,7 +11,7 @@ public sealed record Choice(object Value, string Label)
 public static class Options
 {
     public static Choice[] UpmixModes { get; } = UpmixSettings.Modes.Select(m => new Choice(m, UpmixSettings.Title(m))).ToArray();
-    public static Choice[] Codecs { get; } = { new(0, "Dolby Digital (AC3)"), new(1, "DTS") };
+    public static Choice[] Codecs { get; } = { new(0, "Dolby Digital (AC3)"), new(1, "DTS"), new(2, "Multichannel PCM") };
     public static Choice[] Ac3Bitrates { get; } = { new(384, "384 kb/s"), new(448, "448 kb/s (DVD)"), new(640, "640 kb/s (best)") };
     public static Choice[] DtsBitrates { get; } = { new(1509, "1509 kb/s (full rate, best)"), new(754, "754 kb/s (half rate)") };
     public static Choice[] Crossovers { get; } = new[] { 60, 80, 100, 120, 150, 200, 250 }.Select(v => new Choice(v, $"{v} Hz")).ToArray();

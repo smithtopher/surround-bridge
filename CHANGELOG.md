@@ -1,5 +1,19 @@
 # Changelog
 
+## [Windows 1.1.0] — 2026-11-23
+
+The Mac 1.2.0 features, on Windows:
+
+- **Multichannel PCM** (Settings ▸ General ▸ Format): uncompressed 5.1 for an AV receiver connected
+  to the PC by HDMI: the best quality and less delay (~107 ms estimated instead of ~153 ms with
+  Dolby Digital), but optical can't carry it. Tested live: the Samsung over HDMI accepted 6-channel
+  24-bit 48 kHz.
+- **Treble boost**, next to the bass boost, in a new **Tone** section in Settings ▸ Upmix and in the
+  tray menu. Turning both up gives a loudness curve for listening at low volume.
+- Tone is no longer part of the upmix presets, so it stays when you change the mode, and moving
+  it no longer turns the mode into Custom (Wide used to set the bass boost to +3 dB).
+- Fixed: Settings ▸ General ▸ Send to showed the device's internal description instead of its name.
+
 ## [Windows 1.0.2] — 2026-11-23
 
 - **Less delay (lip sync):** the output buffer settled at ~72 ms on Windows, because the virtual cable

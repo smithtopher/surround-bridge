@@ -19,6 +19,8 @@ public enum BridgeState { Off, Starting, Running, NoVirtualDevice, NoOutput, Fai
 public sealed record OutputDevice(string Uid, string Name, bool IsHdmi)
 {
     public string Label => Name + (IsHdmi ? " (HDMI)" : "");
+    // the themed ComboBox's selection box shows ToString(), not DisplayMemberPath
+    public override string ToString() => Label;
 }
 
 /// One thread running actions in order (the Mac app's serial DispatchQueue).
@@ -111,14 +113,17 @@ public sealed class BridgeModel : INotifyPropertyChanged
         }
     }
 
-    /// 0 Dolby Digital, 1 DTS
+    /// 0 Dolby Digital, 1 DTS, 2 multichannel PCM (HDMI receivers; SB_CODEC_*)
     public int Codec
     {
         get => s.codec;
-        set { if (s.codec == value) return; s.codec = value; s.Save(); Changed(); Changed(nameof(IsDts)); Changed(nameof(IsAc3)); RestartIfOn(); }
+        set { if (s.codec == value) return; s.codec = value; s.Save(); Changed(); Changed(nameof(IsDts)); Changed(nameof(IsAc3)); Changed(nameof(IsPcm)); Changed(nameof(HasBitrate)); RestartIfOn(); }
     }
     public bool IsDts => s.codec == 1;
-    public bool IsAc3 => s.codec != 1;
+    public bool IsAc3 => s.codec == 0;
+    public bool IsPcm => s.codec == 2;
+    public bool HasBitrate => !IsPcm;
+    private string CodecName => IsPcm ? "PCM" : IsDts ? "DTS" : "Dolby Digital";
 
     public int Ac3Bitrate
     {
@@ -173,7 +178,7 @@ public sealed class BridgeModel : INotifyPropertyChanged
     {
         foreach (var n in new[] { nameof(Upmix), nameof(UpmixMode), nameof(UpmixBlurb), nameof(UpmixEnabled), nameof(SurroundSlider),
                                   nameof(CenterSlider), nameof(WidthSlider), nameof(LfeSlider), nameof(CrossoverHz), nameof(LfeMove),
-                                  nameof(BassDb), nameof(RearDelayMs), nameof(RearHighcutHz), nameof(SurroundLabel), nameof(CenterLabel),
+                                  nameof(BassDb), nameof(TrebleDb), nameof(TrebleLabel), nameof(RearDelayMs), nameof(RearHighcutHz), nameof(SurroundLabel), nameof(CenterLabel),
                                   nameof(WidthLabel), nameof(LfeLabel), nameof(BassLabel), nameof(RearDelayLabel), nameof(StatusLine) })
             Changed(n);
     }
@@ -210,7 +215,9 @@ public sealed class BridgeModel : INotifyPropertyChanged
     public double LfeSlider { get => DbIn(s.upmix.LfeDb); set { if (DbOut(value) != s.upmix.LfeDb) Edit(u => u with { LfeDb = DbOut(value) }); } }
     public int CrossoverHz { get => s.upmix.CrossoverHz; set { if (value != s.upmix.CrossoverHz) Edit(u => u with { CrossoverHz = value }); } }
     public bool LfeMove { get => s.upmix.LfeMove; set { if (value != s.upmix.LfeMove) Edit(u => u with { LfeMove = value }); } }
-    public double BassDb { get => s.upmix.BassDb; set { var v = Math.Round(value * 2) / 2; if (v != s.upmix.BassDb) Edit(u => u with { BassDb = v }); } }
+    // tone: not part of the presets, so changing it keeps the mode
+    public double BassDb { get => s.upmix.BassDb; set { var v = Math.Round(value * 2) / 2; if (v != s.upmix.BassDb) Upmix = s.upmix with { BassDb = v }; } }
+    public double TrebleDb { get => s.upmix.TrebleDb; set { var v = Math.Round(value * 2) / 2; if (v != s.upmix.TrebleDb) Upmix = s.upmix with { TrebleDb = v }; } }
     public double RearDelayMs { get => s.upmix.RearDelayMs; set { var v = Math.Round(value); if (v != s.upmix.RearDelayMs) Edit(u => u with { RearDelayMs = v }); } }
     public int RearHighcutHz { get => s.upmix.RearHighcutHz; set { if (value != s.upmix.RearHighcutHz) Edit(u => u with { RearHighcutHz = value }); } }
 
@@ -220,6 +227,7 @@ public sealed class BridgeModel : INotifyPropertyChanged
     public string CenterLabel => s.upmix.Center < 0.05 ? "Phantom" : s.upmix.Center > 0.95 ? "Locked" : $"{s.upmix.Center * 100:0}%";
     public string WidthLabel => Math.Abs(s.upmix.Width - 0.5) < 0.01 ? "As recorded" : $"{s.upmix.Width * 100:0}%";
     public string BassLabel => s.upmix.BassDb < 0.25 ? "Off" : $"+{s.upmix.BassDb:0.0} dB";
+    public string TrebleLabel => s.upmix.TrebleDb < 0.25 ? "Off" : $"+{s.upmix.TrebleDb:0.0} dB";
     public string RearDelayLabel => s.upmix.RearDelayMs < 0.5 ? "Off" : $"{s.upmix.RearDelayMs:0} ms";
 
     private void PushUpmix()
@@ -263,7 +271,7 @@ public sealed class BridgeModel : INotifyPropertyChanged
     {
         BridgeState.Off => "Off",
         BridgeState.Starting => "Starting…",
-        BridgeState.Running => $"{(IsDts ? "DTS" : "Dolby Digital")} {(s.upmix.Enabled || status.channels >= 6 ? "5.1" : "stereo")} → "
+        BridgeState.Running => $"{CodecName} {(s.upmix.Enabled || status.channels >= 6 ? "5.1" : "stereo")} → "
                                + $"{SelectedOutput?.Name ?? "output"} · ~{Math.Round(status.latency_ms)} ms",
         BridgeState.NoVirtualDevice => "The virtual audio cable isn't installed",
         BridgeState.NoOutput => $"{(s.outputName.Length > 0 ? s.outputName : "The HDMI/optical output")} isn't connected",
@@ -356,7 +364,7 @@ public sealed class BridgeModel : INotifyPropertyChanged
         int gen = ++generation;
         var cfg = new Native.SBConfig
         {
-            codec = IsDts ? Native.SB_CODEC_DTS : Native.SB_CODEC_AC3,
+            codec = IsPcm ? Native.SB_CODEC_PCM : IsDts ? Native.SB_CODEC_DTS : Native.SB_CODEC_AC3,
             ac3_bitrate_kbps = s.ac3Bitrate,
             dts_bitrate_kbps = s.dtsBitrate,
         };

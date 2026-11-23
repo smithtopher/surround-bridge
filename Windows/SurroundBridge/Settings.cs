@@ -12,7 +12,7 @@ public sealed class Settings
     public bool enabled { get; set; }
     public string outputUID { get; set; } = "";
     public string outputName { get; set; } = "";
-    public int codec { get; set; }                  // 0 AC3, 1 DTS
+    public int codec { get; set; }                  // 0 AC3, 1 DTS, 2 multichannel PCM
     public int ac3Bitrate { get; set; } = 640;
     public int dtsBitrate { get; set; } = 1509;
     public bool autoSwitchOutput { get; set; } = true;

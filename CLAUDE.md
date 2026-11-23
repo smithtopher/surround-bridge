@@ -78,8 +78,9 @@ docs/PLAN.md the roadmap.
   `pc_set_device_change_callback` (debounced 600 ms); wake via SystemEvents.PowerModeChanged.
   Virtual device = input named "CABLE Output"; apps play to the output "CABLE Input".
 - UI: `FlyoutWindow` (tray popover), `SettingsWindow` (General/Upmix/About), `UpmixSliders`
-  (compact/full), `Theme.xaml` + `Theme.cs` (own control templates, light/dark from AppsUseLightTheme,
-  accent = the icon's indigo). `CableSetup.cs`: downloads VBCABLE_Driver_Pack45.zip from vb-audio.com,
+  (compact/full), `ToneSliders` (compact/full), `Theme.xaml` + `Theme.cs` (own control templates, light/dark from AppsUseLightTheme,
+  accent = the icon's indigo). The themed ComboBox shows the item's `ToString()` in its
+  selection box (DisplayMemberPath only applies to the list), so item types override it. `CableSetup.cs`: downloads VBCABLE_Driver_Pack45.zip from vb-audio.com,
   WinVerifyTrust + signer check, runs `VBCABLE_Setup_x64.exe` elevated.
 - **The installer is the app itself** (`Installer.cs`, `SetupWindow`): the release exe, run from
   anywhere but `%LOCALAPPDATA%\Programs\Surround Bridge\`, shows Install/Update/Reinstall; copies
@@ -186,7 +187,9 @@ scripts/build_ffmpeg*.sh   same as Surround Player's (static 9.0.2, avfilter wit
   - Live 2026-11-23 (silent media): Surround Bridge device → the Samsung over HDMI accepted 6 ch
     24-bit 48 kHz (order L R LFE C Ls Rs), ~91 ms estimated delay vs ~140 ms AC3. Stable fill, a
     gap or two at start only. Built-in speakers: stereo works; 6 ch is refused with a clear message.
-  - Windows: `Native.cs` has the constant; the tray app's UI doesn't offer it yet.
+  - Windows (1.1.0): "Multichannel PCM" in the Format list (`Options.Codecs`, `BridgeModel.IsPcm`;
+    the bitrate row hides). Live 2026-11-23, VB-Cable → the Samsung over NVIDIA HDMI: exclusive 6 ch
+    int 24-bit (in 32) 48 kHz accepted, ~107 ms estimated; 6 gaps in the first ~8 s, none after.
 - **Tone (`PCUpmix.treble_db`, Mac 1.2.0):** a treble high shelf (6 kHz) next to the bass shelf
   (100 Hz), both before the surround filter, so they only work with the upmix on.
   - Our FFmpeg has no `treble` filter, so it's a second `bass` (low shelf) of −T dB plus +T dB of
@@ -197,8 +200,9 @@ scripts/build_ffmpeg*.sh   same as Surround Player's (static 9.0.2, avfilter wit
     image. Q 0.7 shelves overshoot ~0.3 dB.
   - The app keeps tone (bass + treble) out of the presets: a preset no longer sets bass (Wide used
     to set +3), so a loudness curve survives mode changes. Key `upmixTrebleDb`.
-  - `Windows/SurroundBridge/Native.cs` PCUpmix has the field (it must match the C struct), but
-    there's no UI there yet.
+  - Windows (1.1.0): `ToneSliders.xaml` (compact in the flyout, full in Settings ▸ Upmix ▸ Tone),
+    `UpmixSettings.TrebleDb`; `BridgeModel.BassDb/TrebleDb` set the upmix without switching to Custom;
+    the presets in Upmix.cs no longer touch bass. Native.cs PCUpmix must match the C struct.
 
 ## Testing — IMPORTANT
 - **Never play audible test signals on a real device.** The TV is often the default output. Use silent

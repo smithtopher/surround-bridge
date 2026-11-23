@@ -50,7 +50,6 @@
                     <RowDefinition Height="38" />
                     <RowDefinition Height="38" />
                     <RowDefinition Height="32" />
-                    <RowDefinition Height="32" />
                     <RowDefinition Height="38" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
@@ -63,21 +62,16 @@
                 <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" VerticalAlignment="Center" ItemsSource="{x:Static local:Options.LfeMoves}"
                           SelectedValuePath="Value" SelectedValue="{Binding LfeMove}" />
 
-                <TextBlock Grid.Row="2" Text="Bass boost" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
-                <Slider Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="12" TickFrequency="0.5" SmallChange="0.5" LargeChange="2"
-                        Value="{Binding BassDb}" />
-                <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding BassLabel}" Style="{StaticResource ValueText}" />
-
-                <TextBlock Grid.Row="3" Text="Rear delay" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
-                <Slider Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="30" TickFrequency="1" SmallChange="1" LargeChange="5"
+                <TextBlock Grid.Row="2" Text="Rear delay" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
+                <Slider Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="30" TickFrequency="1" SmallChange="1" LargeChange="5"
                         Value="{Binding RearDelayMs}" />
-                <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding RearDelayLabel}" Style="{StaticResource ValueText}" />
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding RearDelayLabel}" Style="{StaticResource ValueText}" />
 
-                <TextBlock Grid.Row="4" Text="Rear high-cut" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
-                <ComboBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" VerticalAlignment="Center" ItemsSource="{x:Static local:Options.HighCuts}"
+                <TextBlock Grid.Row="3" Text="Rear high-cut" Style="{StaticResource BodyText}" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" VerticalAlignment="Center" ItemsSource="{x:Static local:Options.HighCuts}"
                           SelectedValuePath="Value" SelectedValue="{Binding RearHighcutHz}" />
 
-                <TextBlock Grid.Row="5" Grid.ColumnSpan="3" Margin="0,10,0,0" Style="{StaticResource CaptionText}"
+                <TextBlock Grid.Row="4" Grid.ColumnSpan="3" Margin="0,10,0,0" Style="{StaticResource CaptionText}"
                            Text="Crossover: bass below it goes to the subwoofer channel (changing it causes a short dropout). Most AV receivers already send the speakers' bass to the subwoofer, so a strong subwoofer level can double the bass. Rear delay keeps sounds anchored at the front; the high-cut makes the rears read as room sound rather than as speakers you can point at." />
             </Grid>
         </Expander>
