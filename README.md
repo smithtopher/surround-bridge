@@ -44,7 +44,7 @@ Everything applies while it plays.
 
 ## Install (Windows 10/11, 64-bit)
 
-1. Open **SurroundBridge-Setup-1.1.0-windows-x64.exe**. It isn't code-signed yet, so Windows
+1. Open **SurroundBridge-Setup-1.2.0-windows-x64.exe**. It isn't code-signed yet, so Windows
    SmartScreen may warn the first time: **More info** → **Run anyway**.
 2. Click **Install**. It installs for your account only (no administrator password), adds a Start menu
    shortcut, and starts. Surround Bridge lives in the **notification area** of the taskbar (the
