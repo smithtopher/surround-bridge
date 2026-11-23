@@ -1,5 +1,14 @@
 # Changelog
 
+## [Windows 1.0.2] — 2026-11-23
+
+- **Less delay (lip sync):** the output buffer settled at ~72 ms on Windows, because the virtual cable
+  hands over a backlog at start-up. It's now capped at one frame + 24 ms (56 ms with Dolby Digital)
+  and the excess is cut once, 2 s after switching on: about 16 ms less delay. If the output ever runs
+  short after that, the buffer grows 8 ms at a time, so this can't bring the stutter back.
+  Measured with the TV: 60 s, no dropouts.
+- For reference, VB-Audio Virtual Cable itself adds ~52 ms that apps can't see (measured).
+
 ## [Windows 1.0.1] — 2026-11-23
 
 - **Fixed: stuttery playback.** Windows' default timer is too coarse (15.6 ms) for reading the

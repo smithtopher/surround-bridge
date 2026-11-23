@@ -60,6 +60,8 @@ struct SBBridge {
     AVChannelLayout enc_layout;
     int64_t comp_next;                   // output sample count of the next drift update
     double target;                       // output ring fill held (s); auto: what it settles at
+    long long gaps_seen;                 // output gaps already answered by raising the target
+    int64_t skip_in;                     // input frames still to discard (worker only): latency trims
     int64_t settle_at, cooldown_until;   // produced-sample marks: auto-target lock, after a jump cut
     int target_locked;
     _Atomic long long jumps;             // big buffer jumps corrected by dropping input
@@ -296,7 +298,9 @@ static int to_fifo(SBBridge *b, uint8_t **data, int n) {
 // Holds the output ring at its target fill by trimming the resampler (input vs output clock).
 //  - auto target (target_buffer_ms 0): 2 s after audio starts, lock onto the fill reached then
 //    (the device's own buffer pulls ~30-40 ms ahead at start, so a fixed ring target only adds
-//    delay), but never below one burst + 8 ms.
+//    delay), but never below one burst + 8 ms nor above one burst + 24 ms: on Windows the start-up
+//    backlog (VB-Cable) left it at ~72 ms, and the excess is cut once at the lock. Each output gap
+//    after that raises the target 8 ms (to one burst + 100 ms at most).
 //  - a jump of more than 40 ms over target (a virtual device delivering a backlog when its
 //    clients start/stop) is cut at once by dropping that much input; following it at +-1000 ppm
 //    would take a minute of wrong lip sync.
@@ -308,20 +312,30 @@ static void steer(SBBridge *b, int64_t produced) {
     double burst_s = pc_enc_burst_bytes(b->enc) / 4 / 48000.0;
     if (!b->target_locked) {
         if (produced < b->settle_at) return;
-        double min_safe = burst_s + 0.008;
+        double min_safe = burst_s + 0.008, max_auto = burst_s + 0.024;
         b->target = b->cfg.target_buffer_ms > 0 ? b->cfg.target_buffer_ms / 1000.0
-                  : b->fill_ema > min_safe ? b->fill_ema : min_safe;
+                  : b->fill_ema < min_safe ? min_safe : b->fill_ema > max_auto ? max_auto : b->fill_ema;
+        b->gaps_seen = pc_out_gaps(b->out);
         b->target_locked = 1;
         b->integ = 0;
         b->comp_next = produced;
+        double excess = b->fill_ema - b->target;   // start-up backlog above the target: cut it once
+        if (excess > 0.004) {
+            b->skip_in += (int64_t)(excess * b->in_rate);
+            b->fill_ema = b->target;
+            b->cooldown_until = produced + 2 * 48000;
+        }
+    }
+    long long gaps = pc_out_gaps(b->out);   // an underrun after locking: the target was too low
+    if (gaps > b->gaps_seen) {
+        b->gaps_seen = gaps;
+        if (b->cfg.target_buffer_ms <= 0 && b->target < burst_s + 0.100) b->target += 0.008;
     }
     if (produced < b->comp_next) return;
     double err = b->fill_ema - b->target;               // >0: too much buffered: input clock faster
     if (err > 0.040 && produced >= b->cooldown_until) {
         int64_t drop = (int64_t)(err * b->in_rate);
-        int64_t r = atomic_load(&b->rpos), w = atomic_load(&b->wpos);
-        if (drop > w - r) drop = w - r;
-        atomic_store(&b->rpos, r + drop);               // the consumer owns rpos: safe to skip ahead
+        b->skip_in += drop;                             // discarded as it arrives (the ring may hold less)
         atomic_fetch_add(&b->jumps, 1);
         b->cooldown_until = produced + 2 * 48000;       // let the ring and its average catch up
         b->fill_ema -= (double)drop / b->in_rate;
@@ -369,6 +383,13 @@ static void *worker_thread(void *arg) {
             if (atomic_load(&b->input_eof)) break;
             pc_sleep_us(1000);
             continue;
+        }
+        if (b->skip_in > 0) {   // a latency trim: discard input from the front
+            int k = n < b->skip_in ? n : (int)b->skip_in;
+            b->skip_in -= k;
+            n -= k;
+            if (n == 0) continue;
+            memmove(chunk, chunk + (size_t)k * b->in_ch, (size_t)n * b->in_ch * sizeof(float));
         }
         if (!primed) {   // first real audio: the auto target locks 2 s from now
             primed = 1;
@@ -445,6 +466,7 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
     b->out_samples = b->comp_next = 0;
     b->target = 0;
     b->target_locked = 0;
+    b->skip_in = 0;
     b->settle_at = INT64_MAX;
     b->cooldown_until = 0;
     atomic_store(&b->jumps, 0);

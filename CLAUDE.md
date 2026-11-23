@@ -53,6 +53,14 @@ docs/PLAN.md the roadmap.
   `SBStatus.gaps` / sbridge "gaps" = silence bursts played after real data started (1 at start-up is
   normal). Live check 2026-11-23, VB-Cable → Samsung, silence played into CABLE Input: 51 gaps in
   30 s before, 1 (start-up) in 40 s after.
+- **Latency (1.0.2):** the auto target settled at ~72 ms here (start-up backlog from VB-Cable).
+  `steer` now caps it at burst + 24 ms (56 ms AC3) and cuts the excess once at the lock
+  (`skip_in`: input frames discarded as they arrive; the jump cut uses it too, since the input ring
+  often holds less than the cut). Each output gap after the lock raises the target 8 ms. Live
+  floor measured with fixed `--buffer-ms`: 40 → couldn't go below ~51 (burst quantisation), 50 and
+  60 clean. VB-Cable's own delay, measured (click rendered into CABLE Input vs its render clock,
+  captured from CABLE Output): ~52 ms, invisible to apps and not in `latency_ms`. Remaining budget:
+  upmix window 43 ms (WIN_SIZE 4096, shared pc_upmix.c), AC3 frame 32 ms, exclusive device ~20 ms.
 - **Tested live 2026-11-23:** VB-Cable installed; CABLE Output → Dolby Digital → Samsung over HDMI
   (exclusive), drift control holding ~74 ms, IPolicyConfig default-output switching (test script).
   The user ran 1.0.0 in the app and heard the stutter above. **Not yet tested:** hot-plug, music
