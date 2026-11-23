@@ -15,5 +15,14 @@ and the [changelog](https://github.com/smithtopher/surround-bridge/blob/main/CHA
 
 ## macOS
 
-The Mac app's installer (`SurroundBridge-1.0.0.pkg`) is built on a Mac with `scripts/make_installer.sh`
-and goes in `macOS/`.
+| File | Version | Built from | SHA-256 |
+|---|---|---|---|
+| [macOS/SurroundBridge-1.1.0.pkg](macOS/SurroundBridge-1.1.0.pkg) | 1.1.0 | main 6f8c490 | `b7395128c62fe6b9c7dae63019a68c54d74a486fbf77f04d093fe8204f52d9d2` |
+
+macOS 14+, Apple Silicon and Intel (universal), 16 MB. It installs the app in Applications and the
+**Surround Bridge audio device** (built from BlackHole 0.7.1's GPL-3 source, see
+[driver/](https://github.com/smithtopher/surround-bridge/tree/main/driver)), so there's nothing else to
+install. It isn't signed by a registered developer yet: the first time, right-click it in Finder →
+**Open** → **Open**. See the
+[README](https://github.com/smithtopher/surround-bridge/blob/main/README.md#install-macos-14) and the
+[changelog](https://github.com/smithtopher/surround-bridge/blob/main/CHANGELOG.md).
