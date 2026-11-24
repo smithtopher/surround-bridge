@@ -271,7 +271,8 @@ public sealed class BridgeModel : INotifyPropertyChanged
     {
         BridgeState.Off => "Off",
         BridgeState.Starting => "Starting…",
-        BridgeState.Running => $"{CodecName} {(s.upmix.Enabled || status.channels >= 6 ? "5.1" : "stereo")} → "
+        BridgeState.Running => $"{CodecName} {(status.out_channels > 0 ? (status.out_channels >= 8 ? "7.1" : status.out_channels >= 6 ? "5.1" : "stereo")
+                                  : s.upmix.Enabled || status.channels >= 6 ? "5.1" : "stereo")} → "
                                + $"{SelectedOutput?.Name ?? "output"} · ~{Math.Round(status.latency_ms)} ms",
         BridgeState.NoVirtualDevice => "The virtual audio cable isn't installed",
         BridgeState.NoOutput => $"{(s.outputName.Length > 0 ? s.outputName : "The HDMI/optical output")} isn't connected",

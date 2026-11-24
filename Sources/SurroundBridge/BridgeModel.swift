@@ -120,7 +120,9 @@ final class BridgeModel: ObservableObject {
         case .starting: return "Starting…"
         case .running:
             let codecName = codec == 2 ? "PCM" : codec == 1 ? "DTS" : "Dolby Digital"
-            let lay = upmix.enabled ? "5.1" : (status.channels >= 6 ? "5.1" : "stereo")
+            let oc = Int(status.out_channels)   // what goes out now (0: an older core)
+            let lay = oc >= 8 ? "7.1" : oc >= 6 ? "5.1" : oc > 0 ? "stereo"
+                : upmix.enabled ? "5.1" : (status.channels >= 6 ? "5.1" : "stereo")
             return "\(codecName) \(lay) → \(selectedOutput?.name ?? "output") · ~\(Int(status.latency_ms.rounded())) ms"
         case .needsPermission: return "Needs microphone access (see below)"
         case .noVirtualDevice: return "The Surround Bridge audio device isn't installed"

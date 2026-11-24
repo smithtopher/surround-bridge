@@ -1,5 +1,14 @@
 # Changelog
 
+## [Windows 1.3.2] — 2026-11-24
+
+- **With the upmix off, stereo goes out as a 2.0 stream** (Dolby Digital and DTS, cable at 5.1 or
+  7.1). It used to go out as 5.1 with four silent channels, so the amp's own upmix couldn't be
+  turned on. Now the amp sees 2.0 while stereo plays (after 3 seconds of sound in the front pair
+  only) and 5.1 as soon as 5.1 plays. Most amps mute for a moment when the stream changes.
+  Multichannel PCM stays 5.1 (the HDMI format can't change without reopening the output).
+- The status line shows what actually goes out (stereo, 5.1 or 7.1).
+
 ## [Windows 1.3.1] — 2026-11-24
 
 - **Stereo or 5.1 is decided from the sound, not the cable's setting.** 1.3.0 decided by the

@@ -44,7 +44,7 @@ Everything applies while it plays.
 
 ## Install (Windows 10/11, 64-bit)
 
-1. Open **SurroundBridge-Setup-1.3.1-windows-x64.exe**. It isn't code-signed yet, so Windows
+1. Open **SurroundBridge-Setup-1.3.2-windows-x64.exe**. It isn't code-signed yet, so Windows
    SmartScreen may warn the first time: **More info** → **Run anyway**.
 2. Click **Install**. It installs for your account only (no administrator password), adds a Start menu
    shortcut, and starts. Surround Bridge lives in the **notification area** of the taskbar (the
@@ -67,7 +67,8 @@ settings ▸ More sound settings ▸ CABLE Input ▸ Configure) and **CABLE Outp
 count (Recording ▸ CABLE Output ▸ Properties ▸ Advanced), and leave it there. The bridge then
 listens to what's playing: 5.1 passes through as it is; stereo (sound only in the front pair for
 a few seconds) is upmixed, with a short crossfade when it changes. Tone applies to both. With the
-upmix off, stereo stays in the front speakers.
+upmix off, stereo goes out to the amp as a 2.0 stream (Dolby Digital or DTS), so the amp's own
+upmix can take over; 5.1 still goes out as 5.1.
 
 **Uninstall:** Settings ▸ About ▸ Uninstall, or Windows Settings ▸ Apps ▸ Installed apps ▸ Surround
 Bridge. VB-Audio Virtual Cable stays (remove it with its own setup's "Remove Driver").

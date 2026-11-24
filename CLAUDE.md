@@ -190,6 +190,18 @@ scripts/build_ffmpeg*.sh   same as Surround Player's (static 9.0.2, avfilter wit
     next hop). The upmix path is 43 ms behind, so a switch repeats/skips 43 ms (accepted rather
     than delaying 5.1 all the time). PCM 7.1 + upmix: the graph's back pair stays BL/BR.
     regress "auto" (5.1 → stereo-in-5.1 → 5.1 for PCM/AC3/DTS/tone, stereo from the start).
+  - **Auto stream (`b->auto_enc`, Windows 1.3.2, 2026-11-24): upmix off, more than 2 input channels,
+    AC3/DTS → stereo goes out as a real 2.0 stream**, so the amp's own upmix (only offered on 2.0)
+    works. Same `auto_want` detection (3 s hold to 2.0, at once to 5.1) and the same two-stage
+    converter (`two_stage`: swr to the input layout, `b->remix` to 5.1 + tone). `b->enc2` (2.0,
+    same codec and bitrate) encodes FL/FR (planes 0/1, or picked out of packed DTS frames via
+    `st2`) of every frame beside the 5.1 encoder, so both stay warm and in step; `send_bursts`
+    sends the one `stereo_out` picks, decided before the chunk enters the fifo (5.1 sound is
+    never encoded as 2.0). The keep-alive silence burst stays the 5.1 one (pc_output sets it once;
+    only plays on underruns). Not for PCM (the device's channel count is fixed at open).
+    `SBStatus.out_channels` = what goes out now; the status lines use it. Checked: AC3 switch has
+    no step beyond the tone's slope; FFmpeg's DTS decoder ramps in over ~6 ms at 5.1 → 2.0 (it
+    does the same on an FFmpeg-only stream). regress "auto stream" (per-frame channel counts).
 - **Multichannel PCM (`SB_CODEC_PCM`, Mac 1.2.0, 2026-11-23):**
   - No encoder (`b->enc` NULL, `b->pcm`). Output: `pc_out_open(PC_STREAM_PCM_EXCLUSIVE)`, the
     shared CoreAudio/WASAPI path from Surround Player, asking for 5.1(side) 48 kHz when upmixed,

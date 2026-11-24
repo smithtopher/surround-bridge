@@ -49,6 +49,7 @@ typedef struct {
     float peak_db[8];           // input peak level per channel over the last ~0.5 s (-120 = silence)
     int channels;
     long long gaps;             // output underruns: silence played in place of audio (audible)
+    int out_channels;           // what goes out now (2 while a 5.1 cable plays stereo with the upmix off)
 } SBStatus;
 
 PC_API SBBridge *sb_bridge_create(void);

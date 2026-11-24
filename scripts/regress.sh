@@ -315,5 +315,43 @@ run "$W/auto.flac" "$W/an.raw" --pcm --no-upmix && {
     [ "$r" = "1000.0 1000.0 - - - -" ] && pass "upmix off: stereo in a 5.1 cable stays in front ($r)" || fail "upmix off: '$r'"
 }
 
+echo "auto stream: upmix off, a 5.1 cable: stereo goes out as a 2.0 stream (the amp can upmix it)"
+cat > "$W/frames.py" <<'EOF'
+# ffprobe frame lines "pts_time,channels": the channel count in each time span, '?' if mixed
+import sys
+spans = [tuple(map(float, a.split('-'))) for a in sys.argv[2:]]
+fr = []
+for line in open(sys.argv[1]):
+    t, c = line.strip().split(',')[:2]
+    fr.append((float(t), int(c)))
+out = []
+for t0, t1 in spans:
+    cs = set(c for t, c in fr if t0 <= t < t1)
+    out.append(str(cs.pop()) if len(cs) == 1 else '?' + ''.join(sorted(map(str, cs))))
+print(' '.join(out))
+EOF
+for codec in ac3 dts; do
+    flag=""; [ $codec = dts ] && flag=--dts
+    run "$W/auto.flac" "$W/ae.spdif" $flag --no-upmix && {
+        ffprobe -v error -f spdif -i "$W/ae.spdif" -show_entries frame=pts_time,channels -of csv=p=0 > "$W/fr.txt"
+        r=$("$PY" -I "$W/frames.py" "$W/fr.txt" 0.2-3.9 4.5-6.5 7.2-8.9 9.1-12.8)
+        [ "$r" = "6 6 2 6" ] && pass "$codec auto stream: 5.1, 5.1 (first 3 s of stereo), 2.0, 5.1 again ($r)" || fail "$codec auto stream: channels per span '$r', want '6 6 2 6'"
+        ff -f spdif -i "$W/ae.spdif" -f f32le -ac 6 "$W/ae.raw"
+        r=$("$PY" -I "$W/seg.py" "$W/ae.raw" 6 1 3.5);   [ "$r" = "$SIX" ] && pass "$codec auto stream: 5.1 in place ($r)" || fail "$codec auto stream, 5.1: '$r'"
+        r=$("$PY" -I "$W/seg.py" "$W/ae.raw" 6 7.6 8.9); case "$r" in "1000.0 1000.0 "*) pass "$codec auto stream: 2.0 carries the stereo ($r)";; *) fail "$codec auto stream, 2.0: '$r'";; esac
+        r=$("$PY" -I "$W/seg.py" "$W/ae.raw" 6 9.2 12.5); [ "$r" = "$SIX" ] && pass "$codec auto stream: 5.1 again at once ($r)" || fail "$codec auto stream, 5.1 again: '$r'"
+    }
+done
+run "$W/auto2.flac" "$W/a2.spdif" --no-upmix && {
+    ffprobe -v error -f spdif -i "$W/a2.spdif" -show_entries frame=pts_time,channels -of csv=p=0 > "$W/fr.txt"
+    r=$("$PY" -I "$W/frames.py" "$W/fr.txt" 0-5.9)
+    [ "$r" = "2" ] && pass "auto stream: stereo from the start is 2.0 throughout ($r)" || fail "auto stream, stereo from the start: '$r'"
+}
+run "$W/auto.flac" "$W/au5.spdif" && {
+    ffprobe -v error -f spdif -i "$W/au5.spdif" -show_entries frame=pts_time,channels -of csv=p=0 > "$W/fr.txt"
+    r=$("$PY" -I "$W/frames.py" "$W/fr.txt" 0-12.8)
+    [ "$r" = "6" ] && pass "upmix on: the stream stays 5.1 throughout ($r)" || fail "upmix on, stream: '$r'"
+}
+
 [ $FAIL = 0 ] && echo "ALL PASSED" || echo "SOME CHECKS FAILED"
 exit $FAIL

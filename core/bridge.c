@@ -69,6 +69,14 @@ struct SBBridge {
     // run all the time (the upmix on FL/FR, pass-through with tone on everything) and the one
     // that goes out crossfades over FADE samples when the content changes.
     int autodetect, decided, fl, fr;
+    // auto stream (more than 2 input channels, upmix off, Dolby Digital / DTS): what plays decides
+    // the stream too, so stereo goes out as a real 2.0 stream (the amp's own upmix works on it).
+    // A 2.0 encoder runs beside the 5.1 one on FL/FR, both always (warm, frames in step); each
+    // frame goes out from the one that matches.
+    int auto_enc, two_stage;             // two_stage: swr to the input layout, then b->remix
+    PCEncoder *enc2;
+    _Atomic int stereo_out;              // auto_enc: the 2.0 stream is going out
+    uint8_t **st2;                       // packed formats: one frame of FL/FR for enc2
     int64_t front_only;                  // samples of sound in FL/FR only, in a row
     int fade_pos;                        // samples into the crossfade (FADE: not fading)
     SwrContext *remix;                   // 48 kHz input layout (fltp) -> the output's layout
@@ -307,13 +315,25 @@ static int send_bursts(SBBridge *b, int serial) {
     uint8_t **tmp = NULL;
     if (av_samples_alloc_array_and_samples(&tmp, NULL, b->enc_layout.nb_channels, fs, pc_enc_sample_fmt(b->enc), 0) < 0)
         return -1;
-    int r = 0;
+    int r = 0, ch = b->enc_layout.nb_channels;
     while (av_audio_fifo_size(b->fifo) >= fs) {
         av_audio_fifo_read(b->fifo, (void **)tmp, fs);
         for (int c = 0; c < nplanes; c++) planes[c] = tmp[c];
         const uint8_t *burst = NULL;
         int n = pc_enc_encode(b->enc, planes, &burst);
         if (n < 0) { r = -1; break; }
+        if (b->enc2) {   // the 2.0 stream from FL/FR (planes 0 and 1 of the 5.1 output layout)
+            uint8_t *lr[2] = { tmp[0], nplanes > 1 ? tmp[1] : NULL };
+            if (nplanes == 1) {   // packed: pick FL/FR out of each frame
+                int bps = av_get_bytes_per_sample(pc_enc_sample_fmt(b->enc));
+                for (int i = 0; i < fs; i++) memcpy(b->st2[0] + (size_t)i * 2 * bps, tmp[0] + (size_t)i * ch * bps, 2 * (size_t)bps);
+                lr[0] = b->st2[0];
+            }
+            const uint8_t *burst2 = NULL;
+            int n2 = pc_enc_encode(b->enc2, lr, &burst2);
+            if (n2 < 0) { r = -1; break; }
+            if (b->stereo_out) { n = n2; burst = burst2; }
+        }
         if (n > 0 && pc_out_write(b->out, burst, n, NAN, &b->out_serial, serial) < 0) { r = -1; break; }
         b->out_samples += fs;
     }
@@ -438,10 +458,10 @@ static void auto_set(SBBridge *b, int up, int fade) {
     b->fade_pos = !fade ? FADE : b->fade_pos < FADE ? FADE - b->fade_pos : 0;
 }
 
-// One converted chunk (input layout, planar float): sound outside FL/FR means multichannel,
-// pass it through at once; FL/FR alone for AUTO_HOLD means stereo, upmix it. Silence changes
-// nothing (a pause doesn't flip the mode). The first sound decides without a fade.
-static void auto_detect(SBBridge *b, uint8_t **p, int n) {
+// One converted chunk (input layout, planar float): 1 if it's stereo (`cur`: what it is now),
+// 0 if multichannel, -1 silence (no change: a pause doesn't flip the mode). Sound outside FL/FR
+// means multichannel at once; FL/FR alone for AUTO_HOLD means stereo; the first sound decides.
+static int auto_want(SBBridge *b, uint8_t **p, int n, int cur) {
     int front = 0, extra = 0;
     for (int c = 0; c < b->in_ch; c++) {
         const float *x = (const float *)p[c];
@@ -449,12 +469,10 @@ static void auto_detect(SBBridge *b, uint8_t **p, int n) {
         for (int i = 0; i < n && !loud; i++) loud = fabsf(x[i]) > AUTO_SILENT;
         if (c == b->fl || c == b->fr) front |= loud; else extra |= loud;
     }
-    if (!front && !extra) return;
-    int want;
-    if (extra) { b->front_only = 0; want = 0; }
-    else { b->front_only += n; want = b->upmixing || !b->decided || b->front_only >= AUTO_HOLD; }
-    auto_set(b, want, b->decided);
-    b->decided = 1;
+    if (!front && !extra) return -1;
+    if (extra) { b->front_only = 0; return 0; }
+    b->front_only += n;
+    return cur || !b->decided || b->front_only >= AUTO_HOLD;
 }
 
 // a = (1 - g) * b + g * a over k samples of the fade (linear: no level bump when the two paths
@@ -506,10 +524,23 @@ static void auto_mix(SBBridge *b) {
     av_audio_fifo_drain(from, av_audio_fifo_size(from));
 }
 
+// auto_enc: one converted chunk (input layout, planar float): which stream, then remixed to
+// the 5.1 output layout with tone. The choice applies from the next encoder frame, so no 5.1
+// sound is ever encoded as 2.0.
+static int enc_fifo(SBBridge *b, uint8_t **data, int n, uint8_t **rbuf, int rmax) {
+    if (n > 0) {
+        int w = auto_want(b, data, n, b->stereo_out);
+        if (w >= 0) { b->stereo_out = w; b->decided = 1; }
+    }
+    int k = swr_convert(b->remix, rbuf, rmax, n > 0 ? (const uint8_t **)data : NULL, n);
+    return k < 0 || (k > 0 && tone_fifo(b, rbuf, k) < 0) ? -1 : 0;
+}
+
 // One converted chunk (input layout, planar float, 48 kHz) through both paths.
 static int auto_fifo(SBBridge *b, uint8_t **data, int n, uint8_t **rbuf, int rmax) {
     if (n > 0) {
-        auto_detect(b, data, n);
+        int w = auto_want(b, data, n, b->upmixing);
+        if (w >= 0) { auto_set(b, w, b->decided); b->decided = 1; }
         uint8_t *lr[2] = { data[b->fl], data[b->fr] };
         if (upmix_fifo(b, lr, n) < 0) return -1;
     }
@@ -616,12 +647,12 @@ static void *worker_thread(void *arg) {
     SBBridge *b = arg;
     int serial = atomic_load(&b->out_serial);
     float *chunk = av_malloc((size_t)CHUNK * b->in_ch * sizeof(float));
-    int planes_ch = b->autodetect ? b->in_ch : b->upmixing ? 2 : b->enc_layout.nb_channels;
-    enum AVSampleFormat pfmt = b->autodetect || b->upmixing ? AV_SAMPLE_FMT_FLTP : b->fmt;
+    int planes_ch = b->two_stage ? b->in_ch : b->upmixing ? 2 : b->enc_layout.nb_channels;
+    enum AVSampleFormat pfmt = b->two_stage || b->upmixing ? AV_SAMPLE_FMT_FLTP : b->fmt;
     uint8_t **cvt = NULL, **rbuf = NULL;
     int cvt_max = swr_get_out_samples(b->swr, CHUNK) + 256;
     av_samples_alloc_array_and_samples(&cvt, NULL, planes_ch, cvt_max, pfmt, 0);
-    if (b->autodetect) av_samples_alloc_array_and_samples(&rbuf, NULL, b->enc_layout.nb_channels, cvt_max, b->fmt, 0);
+    if (b->two_stage) av_samples_alloc_array_and_samples(&rbuf, NULL, b->enc_layout.nb_channels, cvt_max, b->fmt, 0);
     int64_t produced = 0;
     int primed = 0;
     for (;;) {
@@ -658,7 +689,8 @@ static void *worker_thread(void *arg) {
         int out = swr_convert(b->swr, cvt, cvt_max, in, n);
         if (out > 0) {
             produced += out;
-            if ((b->autodetect ? auto_fifo(b, cvt, out, rbuf, cvt_max) : to_fifo(b, cvt, out)) < 0 ||
+            if ((b->autodetect ? auto_fifo(b, cvt, out, rbuf, cvt_max)
+                 : b->auto_enc ? enc_fifo(b, cvt, out, rbuf, cvt_max) : to_fifo(b, cvt, out)) < 0 ||
                 send_bursts(b, serial) < 0) goto done;
         }
         steer(b, produced, serial);
@@ -674,6 +706,11 @@ static void *worker_thread(void *arg) {
             tone_end(b);
             b->fade_pos = FADE;
             auto_mix(b);
+        } else if (b->auto_enc) {
+            if (out > 0) enc_fifo(b, cvt, out, rbuf, cvt_max);
+            int k = swr_convert(b->remix, rbuf, cvt_max, NULL, 0);
+            if (k > 0) tone_fifo(b, rbuf, k);
+            tone_end(b);
         } else {
             if (out > 0) to_fifo(b, cvt, out);
             if (b->upmixing) upmix_flush(b);
@@ -792,6 +829,18 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
         b->enc = pc_enc_open(dts ? AV_CODEC_ID_DTS : AV_CODEC_ID_AC3, &b->enc_layout, rate, err, errlen);
         if (!b->enc) goto fail;
         b->fmt = pc_enc_sample_fmt(b->enc);
+        b->auto_enc = !up.enabled && b->in_ch > 2;
+        if (b->auto_enc) {   // the 2.0 encoder beside it; without one (can't happen), 5.1 only
+            AVChannelLayout st = AV_CHANNEL_LAYOUT_STEREO;
+            char e2[256] = "";
+            b->enc2 = pc_enc_open(dts ? AV_CODEC_ID_DTS : AV_CODEC_ID_AC3, &st, rate, e2, sizeof(e2));
+            if (!b->enc2 || pc_enc_frame_size(b->enc2) != pc_enc_frame_size(b->enc) ||
+                pc_enc_burst_bytes(b->enc2) != pc_enc_burst_bytes(b->enc) || pc_enc_sample_fmt(b->enc2) != b->fmt ||
+                av_samples_alloc_array_and_samples(&b->st2, NULL, 2, pc_enc_frame_size(b->enc), b->fmt, 0) < 0) {
+                pc_enc_close(&b->enc2);
+                b->auto_enc = 0;
+            }
+        }
 
         // 3. output (exclusive IEC 61937), or a file
         if (b->cfg.dump_path) b->out = pc_out_open_file(b->cfg.dump_path, 1, 2, 48000, 0, err, errlen);
@@ -813,16 +862,18 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
     input_layout(b, &in_lay);
     //    auto: to the input's own layout (planar), then both paths: FL/FR into the upmix, and
     //    everything remixed to the output's layout (b->remix, no resampling) for pass-through.
-    const AVChannelLayout *cvt_lay = b->autodetect ? &in_lay : b->upmixing ? &stereo : &b->enc_layout;
-    enum AVSampleFormat cvt_fmt = b->autodetect || b->upmixing ? AV_SAMPLE_FMT_FLTP : b->fmt;
+    b->two_stage = b->autodetect || b->auto_enc;
+    const AVChannelLayout *cvt_lay = b->two_stage ? &in_lay : b->upmixing ? &stereo : &b->enc_layout;
+    enum AVSampleFormat cvt_fmt = b->two_stage || b->upmixing ? AV_SAMPLE_FMT_FLTP : b->fmt;
     if (swr_alloc_set_opts2(&b->swr, cvt_lay, cvt_fmt, 48000,
                             &in_lay, AV_SAMPLE_FMT_FLT, (int)lrint(b->in_rate), 0, NULL) < 0 || swr_init(b->swr) < 0 ||
-        (b->autodetect && (swr_alloc_set_opts2(&b->remix, &b->enc_layout, b->fmt, 48000, &in_lay, AV_SAMPLE_FMT_FLTP,
+        (b->two_stage && (swr_alloc_set_opts2(&b->remix, &b->enc_layout, b->fmt, 48000, &in_lay, AV_SAMPLE_FMT_FLTP,
                                                48000, 0, NULL) < 0 || swr_init(b->remix) < 0))) {
         snprintf(err, errlen, "Resampler setup failed");
         goto fail;
     }
-    if (b->autodetect) {
+    if (b->two_stage) {
+        b->stereo_out = 0;
         b->fl = av_channel_layout_index_from_channel(&in_lay, AV_CHAN_FRONT_LEFT);
         b->fr = av_channel_layout_index_from_channel(&in_lay, AV_CHAN_FRONT_RIGHT);
         if (b->fl < 0 || b->fr < 0) { b->fl = 0; b->fr = 1; }
@@ -861,7 +912,8 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
     else
         snprintf(b->out_desc, sizeof(b->out_desc), "%s %s %lld kb/s%s, IEC 61937 -> %s", dts ? "DTS" : "Dolby Digital", lay,
                  (long long)(pc_enc_bit_rate(b->enc) / 1000),
-                 b->autodetect ? " (stereo upmixed, multichannel passed through)" : b->upmixing ? " (upmixed from stereo)" : "",
+                 b->autodetect ? " (stereo upmixed, multichannel passed through)" : b->auto_enc ? " (2.0 while stereo plays)"
+                 : b->upmixing ? " (upmixed from stereo)" : "",
                  pc_out_description(b->out));
     pc_mutex_unlock(&b->lock);
 
@@ -899,6 +951,8 @@ void sb_bridge_stop(SBBridge *b) {
     sb_bridge_wait(b);
     if (b->out) { pc_out_close(b->out); b->out = NULL; }   // restores the device (hog, format)
     pc_enc_close(&b->enc);
+    pc_enc_close(&b->enc2);
+    if (b->st2) { av_freep(&b->st2[0]); av_freep(&b->st2); }
     pc_upmix_free(&b->um);
     pc_upmix_free(&b->tone);
     swr_free(&b->swr);
@@ -915,6 +969,8 @@ void sb_bridge_stop(SBBridge *b) {
     b->running = 0;
     b->upmixing = 0;
     b->autodetect = 0;
+    b->auto_enc = b->two_stage = 0;
+    b->stereo_out = 0;
     b->pcm = 0;
 }
 
@@ -923,6 +979,7 @@ void sb_bridge_status(SBBridge *b, SBStatus *st) {
     st->running = b->running && !atomic_load(&b->worker_done);   // a file input finishes by itself
     st->upmixing = b->upmixing;
     st->channels = b->in_ch;
+    st->out_channels = !b->running ? 0 : b->auto_enc && b->stereo_out ? 2 : b->enc_layout.nb_channels;
     pc_mutex_lock(&b->lock);
     snprintf(st->input, sizeof(st->input), "%s", b->capfmt.description);
     snprintf(st->output, sizeof(st->output), "%s", b->out_desc);
