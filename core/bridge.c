@@ -61,7 +61,19 @@ struct SBBridge {
     enum AVSampleFormat fmt;             // what the converter / upmix graph / fifo hold
     SwrContext *swr;
     PCUpmixer *um;
-    int um_gen, upmixing;
+    int um_gen;
+    _Atomic int upmixing;                // now: the upmix's output is what goes out
+    AVAudioFifo *um_out, *tone_out;      // where the upmix / tone graphs deliver (b->fifo, or auto's)
+    // auto (more than 2 input channels with the upmix on): Windows mixes every app into the
+    // cable's format, so the channel count can't tell stereo from 5.1; the audio does. Both paths
+    // run all the time (the upmix on FL/FR, pass-through with tone on everything) and the one
+    // that goes out crossfades over FADE samples when the content changes.
+    int autodetect, decided, fl, fr;
+    int64_t front_only;                  // samples of sound in FL/FR only, in a row
+    int fade_pos;                        // samples into the crossfade (FADE: not fading)
+    SwrContext *remix;                   // 48 kHz input layout (fltp) -> the output's layout
+    AVAudioFifo *fifo_up, *fifo_pass;
+    uint8_t **mix_a, **mix_b;            // MIX_MAX samples each, b->fmt, the output's layout
     // tone (bass/treble) for what isn't upmixed (multichannel input, or stereo with the upmix off)
     PCUpmixer *tone;                     // NULL while tone is flat (straight through, bit-exact)
     int tone_gen;                        // upmix_gen it was set up for; -1: the stream's start
@@ -311,6 +323,11 @@ static int send_bursts(SBBridge *b, int serial) {
 }
 
 #define TONE_RAMP_DB 1.0f   // per worker chunk (~21 ms): 0 -> 12 dB in a quarter of a second
+#define AUTO_SILENT 3.2e-5f // auto: below this (-90 dBFS) a channel counts as silent (Windows
+                            // fills the channels a stereo app doesn't have with exact zeros)
+#define AUTO_HOLD (3 * 48000)   // auto: FL/FR only for this long -> stereo, upmix it
+#define FADE 2048           // auto: crossfade between the paths (43 ms)
+#define MIX_MAX 4096
 
 static float tone_step(float now, float want) {
     return fabsf(want - now) <= TONE_RAMP_DB ? want : now + (want > now ? TONE_RAMP_DB : -TONE_RAMP_DB);
@@ -320,7 +337,7 @@ static void tone_pull(SBBridge *b) {
     AVFrame *f = av_frame_alloc();
     if (!f) return;
     while (pc_upmix_receive(b->tone, f) >= 0) {
-        av_audio_fifo_write(b->fifo, (void **)f->extended_data, f->nb_samples);
+        av_audio_fifo_write(b->tone_out, (void **)f->extended_data, f->nb_samples);
         av_frame_unref(f);
     }
     av_frame_free(&f);
@@ -362,19 +379,17 @@ static int tone_fifo(SBBridge *b, uint8_t **data, int n) {
     } else if (b->tone && !pc_tone_wanted(&b->tone_now)) {
         tone_end(b);
     }
-    if (!b->tone) return av_audio_fifo_write(b->fifo, (void **)data, n) < n ? -1 : 0;
+    if (!b->tone) return av_audio_fifo_write(b->tone_out, (void **)data, n) < n ? -1 : 0;
     if (n > 0 && pc_upmix_send(b->tone, data, n) < 0) {   // allocation failure: carry on without tone
         pc_upmix_free(&b->tone);
-        return av_audio_fifo_write(b->fifo, (void **)data, n) < n ? -1 : 0;
+        return av_audio_fifo_write(b->tone_out, (void **)data, n) < n ? -1 : 0;
     }
     tone_pull(b);
     return 0;
 }
 
-// Converted (48 kHz) samples into the encoder fifo, through the upmix when it's on, else
-// through the tone shelves.
-static int to_fifo(SBBridge *b, uint8_t **data, int n) {
-    if (!b->upmixing) return tone_fifo(b, data, n);
+// Stereo planar 48 kHz through the upmix graph, into b->um_out.
+static int upmix_fifo(SBBridge *b, uint8_t **data, int n) {
     int gen = atomic_load(&b->upmix_gen);
     if (gen != b->um_gen) {
         PCUpmix u = upmix_settings(b);
@@ -389,10 +404,118 @@ static int to_fifo(SBBridge *b, uint8_t **data, int n) {
     if (n > 0 && pc_upmix_send(b->um, data, n) < 0) return -1;
     AVFrame *f = av_frame_alloc();
     while (pc_upmix_receive(b->um, f) >= 0) {
-        av_audio_fifo_write(b->fifo, (void **)f->extended_data, f->nb_samples);
+        av_audio_fifo_write(b->um_out, (void **)f->extended_data, f->nb_samples);
         av_frame_unref(f);
     }
     av_frame_free(&f);
+    return 0;
+}
+
+// The upmix's end-of-stream tail: its window's worth of silence pushes the last audio out.
+static void upmix_flush(SBBridge *b) {
+    int z = pc_upmix_flush_samples(b->um);
+    uint8_t **sil = NULL;
+    if (z > 0 && av_samples_alloc_array_and_samples(&sil, NULL, 2, z, AV_SAMPLE_FMT_FLTP, 0) >= 0) {
+        av_samples_set_silence(sil, 0, z, 2, AV_SAMPLE_FMT_FLTP);
+        upmix_fifo(b, sil, z);
+        av_freep(&sil[0]); av_freep(&sil);
+    }
+}
+
+// Converted (48 kHz) samples into the encoder fifo, through the upmix when it's on, else
+// through the tone shelves.
+static int to_fifo(SBBridge *b, uint8_t **data, int n) {
+    return b->upmixing ? upmix_fifo(b, data, n) : tone_fifo(b, data, n);
+}
+
+// --- auto: stereo or multichannel, from the audio
+
+// The output path changes: crossfade from the other one, or (nothing heard yet) switch at once.
+// A switch back mid-fade continues from where the fade had got to.
+static void auto_set(SBBridge *b, int up, int fade) {
+    if (up == b->upmixing) return;
+    b->upmixing = up;
+    b->fade_pos = !fade ? FADE : b->fade_pos < FADE ? FADE - b->fade_pos : 0;
+}
+
+// One converted chunk (input layout, planar float): sound outside FL/FR means multichannel,
+// pass it through at once; FL/FR alone for AUTO_HOLD means stereo, upmix it. Silence changes
+// nothing (a pause doesn't flip the mode). The first sound decides without a fade.
+static void auto_detect(SBBridge *b, uint8_t **p, int n) {
+    int front = 0, extra = 0;
+    for (int c = 0; c < b->in_ch; c++) {
+        const float *x = (const float *)p[c];
+        int loud = 0;
+        for (int i = 0; i < n && !loud; i++) loud = fabsf(x[i]) > AUTO_SILENT;
+        if (c == b->fl || c == b->fr) front |= loud; else extra |= loud;
+    }
+    if (!front && !extra) return;
+    int want;
+    if (extra) { b->front_only = 0; want = 0; }
+    else { b->front_only += n; want = b->upmixing || !b->decided || b->front_only >= AUTO_HOLD; }
+    auto_set(b, want, b->decided);
+    b->decided = 1;
+}
+
+// a = (1 - g) * b + g * a over k samples of the fade (linear: no level bump when the two paths
+// carry the same sound)
+static void crossfade(SBBridge *b, uint8_t **to, uint8_t **from, int k) {
+    int ch = b->enc_layout.nb_channels;
+    for (int i = 0; i < k; i++) {
+        float g = (float)(b->fade_pos + i + 1) / FADE, h = 1.f - g;
+        switch (b->fmt) {
+        case AV_SAMPLE_FMT_FLTP:
+            for (int c = 0; c < ch; c++) { float *t = (float *)to[c], *f = (float *)from[c]; t[i] = g * t[i] + h * f[i]; }
+            break;
+        case AV_SAMPLE_FMT_FLT:
+            for (int c = 0; c < ch; c++) { float *t = (float *)to[0], *f = (float *)from[0]; t[i * ch + c] = g * t[i * ch + c] + h * f[i * ch + c]; }
+            break;
+        case AV_SAMPLE_FMT_S32:
+            for (int c = 0; c < ch; c++) {
+                int32_t *t = (int32_t *)to[0], *f = (int32_t *)from[0];
+                t[i * ch + c] = (int32_t)lrint(g * (double)t[i * ch + c] + h * (double)f[i * ch + c]);
+            }
+            break;
+        default: break;   // (not used) the new path alone
+        }
+    }
+}
+
+// What goes out of the two paths: the current one, crossfading from the other while a fade
+// runs (both must have samples, so it waits for the upmix's next hop), the other discarded.
+static void auto_mix(SBBridge *b) {
+    AVAudioFifo *to = b->upmixing ? b->fifo_up : b->fifo_pass, *from = b->upmixing ? b->fifo_pass : b->fifo_up;
+    while (b->fade_pos < FADE) {
+        int k = FFMIN(FFMIN(av_audio_fifo_size(to), av_audio_fifo_size(from)), FFMIN(FADE - b->fade_pos, MIX_MAX));
+        if (k <= 0) {
+            if (av_audio_fifo_size(to) < 48000 / 4 && av_audio_fifo_size(from) < 48000 / 4) return;
+            b->fade_pos = FADE;   // one path stopped delivering (can't happen): just switch
+            break;
+        }
+        av_audio_fifo_read(to, (void **)b->mix_a, k);
+        av_audio_fifo_read(from, (void **)b->mix_b, k);
+        crossfade(b, b->mix_a, b->mix_b, k);
+        b->fade_pos += k;
+        av_audio_fifo_write(b->fifo, (void **)b->mix_a, k);
+    }
+    int k;
+    while ((k = FFMIN(av_audio_fifo_size(to), MIX_MAX)) > 0) {
+        av_audio_fifo_read(to, (void **)b->mix_a, k);
+        av_audio_fifo_write(b->fifo, (void **)b->mix_a, k);
+    }
+    av_audio_fifo_drain(from, av_audio_fifo_size(from));
+}
+
+// One converted chunk (input layout, planar float, 48 kHz) through both paths.
+static int auto_fifo(SBBridge *b, uint8_t **data, int n, uint8_t **rbuf, int rmax) {
+    if (n > 0) {
+        auto_detect(b, data, n);
+        uint8_t *lr[2] = { data[b->fl], data[b->fr] };
+        if (upmix_fifo(b, lr, n) < 0) return -1;
+    }
+    int k = swr_convert(b->remix, rbuf, rmax, n > 0 ? (const uint8_t **)data : NULL, n);
+    if (k < 0 || (k > 0 && tone_fifo(b, rbuf, k) < 0)) return -1;
+    auto_mix(b);
     return 0;
 }
 
@@ -493,11 +616,12 @@ static void *worker_thread(void *arg) {
     SBBridge *b = arg;
     int serial = atomic_load(&b->out_serial);
     float *chunk = av_malloc((size_t)CHUNK * b->in_ch * sizeof(float));
-    int planes_ch = b->upmixing ? 2 : b->enc_layout.nb_channels;
-    enum AVSampleFormat pfmt = b->upmixing ? AV_SAMPLE_FMT_FLTP : b->fmt;
-    uint8_t **cvt = NULL;
+    int planes_ch = b->autodetect ? b->in_ch : b->upmixing ? 2 : b->enc_layout.nb_channels;
+    enum AVSampleFormat pfmt = b->autodetect || b->upmixing ? AV_SAMPLE_FMT_FLTP : b->fmt;
+    uint8_t **cvt = NULL, **rbuf = NULL;
     int cvt_max = swr_get_out_samples(b->swr, CHUNK) + 256;
     av_samples_alloc_array_and_samples(&cvt, NULL, planes_ch, cvt_max, pfmt, 0);
+    if (b->autodetect) av_samples_alloc_array_and_samples(&rbuf, NULL, b->enc_layout.nb_channels, cvt_max, b->fmt, 0);
     int64_t produced = 0;
     int primed = 0;
     for (;;) {
@@ -526,28 +650,35 @@ static void *worker_thread(void *arg) {
             av_freep(&cvt[0]); av_freep(&cvt);
             cvt_max = need;
             av_samples_alloc_array_and_samples(&cvt, NULL, planes_ch, cvt_max, pfmt, 0);
+            if (rbuf) {
+                av_freep(&rbuf[0]); av_freep(&rbuf);
+                av_samples_alloc_array_and_samples(&rbuf, NULL, b->enc_layout.nb_channels, cvt_max, b->fmt, 0);
+            }
         }
         int out = swr_convert(b->swr, cvt, cvt_max, in, n);
         if (out > 0) {
             produced += out;
-            if (to_fifo(b, cvt, out) < 0 || send_bursts(b, serial) < 0) goto done;
+            if ((b->autodetect ? auto_fifo(b, cvt, out, rbuf, cvt_max) : to_fifo(b, cvt, out)) < 0 ||
+                send_bursts(b, serial) < 0) goto done;
         }
         steer(b, produced, serial);
     }
     // end of a file input: drain the resampler and the upmix graph, pad the last frame
     {
         int out = swr_convert(b->swr, cvt, cvt_max, NULL, 0);
-        if (out > 0) to_fifo(b, cvt, out);
-        if (b->upmixing) {
-            int z = pc_upmix_flush_samples(b->um);
-            uint8_t **sil = NULL;
-            if (av_samples_alloc_array_and_samples(&sil, NULL, 2, z, AV_SAMPLE_FMT_FLTP, 0) >= 0) {
-                av_samples_set_silence(sil, 0, z, 2, AV_SAMPLE_FMT_FLTP);
-                to_fifo(b, sil, z);
-                av_freep(&sil[0]); av_freep(&sil);
-            }
+        if (b->autodetect) {   // both paths' tails, then whatever the current one holds
+            if (out > 0) auto_fifo(b, cvt, out, rbuf, cvt_max);
+            upmix_flush(b);
+            int k = swr_convert(b->remix, rbuf, cvt_max, NULL, 0);
+            if (k > 0) tone_fifo(b, rbuf, k);
+            tone_end(b);
+            b->fade_pos = FADE;
+            auto_mix(b);
+        } else {
+            if (out > 0) to_fifo(b, cvt, out);
+            if (b->upmixing) upmix_flush(b);
+            tone_end(b);
         }
-        tone_end(b);
         int left = b->pcm ? 0 : av_audio_fifo_size(b->fifo) % pc_enc_frame_size(b->enc);
         if (left) {
             int pad = pc_enc_frame_size(b->enc) - left;
@@ -564,6 +695,7 @@ static void *worker_thread(void *arg) {
     }
 done:
     if (cvt) { av_freep(&cvt[0]); av_freep(&cvt); }
+    if (rbuf) { av_freep(&rbuf[0]); av_freep(&rbuf); }
     av_free(chunk);
     atomic_store(&b->worker_done, 1);
     return NULL;
@@ -621,6 +753,7 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
     //    (upmix on) or stay stereo; more than 2 pass through as they are (5.1, or 7.1 for PCM from
     //    7 or 8), tone still applied
     PCUpmix up = upmix_settings(b);
+    b->autodetect = up.enabled && b->in_ch > 2;   // stereo or not is decided from the audio
     b->upmixing = up.enabled && b->in_ch <= 2;
     // upmixed: the graph makes 5.1 with back surrounds, its aformat stage moves them to the side
     // pair, the layout both encoders take (FFmpeg's DTS encoder has no 5.1(back)) and the one
@@ -678,29 +811,58 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
     // 4. converters: the input's channels/rate -> 48 kHz planar (stereo for the upmix)
     AVChannelLayout in_lay = { 0 }, stereo = AV_CHANNEL_LAYOUT_STEREO;
     input_layout(b, &in_lay);
-    if (swr_alloc_set_opts2(&b->swr, b->upmixing ? &stereo : &b->enc_layout,
-                            b->upmixing ? AV_SAMPLE_FMT_FLTP : b->fmt, 48000,
-                            &in_lay, AV_SAMPLE_FMT_FLT, (int)lrint(b->in_rate), 0, NULL) < 0 || swr_init(b->swr) < 0) {
+    //    auto: to the input's own layout (planar), then both paths: FL/FR into the upmix, and
+    //    everything remixed to the output's layout (b->remix, no resampling) for pass-through.
+    const AVChannelLayout *cvt_lay = b->autodetect ? &in_lay : b->upmixing ? &stereo : &b->enc_layout;
+    enum AVSampleFormat cvt_fmt = b->autodetect || b->upmixing ? AV_SAMPLE_FMT_FLTP : b->fmt;
+    if (swr_alloc_set_opts2(&b->swr, cvt_lay, cvt_fmt, 48000,
+                            &in_lay, AV_SAMPLE_FMT_FLT, (int)lrint(b->in_rate), 0, NULL) < 0 || swr_init(b->swr) < 0 ||
+        (b->autodetect && (swr_alloc_set_opts2(&b->remix, &b->enc_layout, b->fmt, 48000, &in_lay, AV_SAMPLE_FMT_FLTP,
+                                               48000, 0, NULL) < 0 || swr_init(b->remix) < 0))) {
         snprintf(err, errlen, "Resampler setup failed");
         goto fail;
     }
-    if (b->upmixing) {
+    if (b->autodetect) {
+        b->fl = av_channel_layout_index_from_channel(&in_lay, AV_CHAN_FRONT_LEFT);
+        b->fr = av_channel_layout_index_from_channel(&in_lay, AV_CHAN_FRONT_RIGHT);
+        if (b->fl < 0 || b->fr < 0) { b->fl = 0; b->fr = 1; }
+        b->decided = 0;
+        b->front_only = 0;
+        b->fade_pos = FADE;
+    }
+    if (b->upmixing || b->autodetect) {
         b->um = pc_upmix_create(&up, 48000, &b->enc_layout, b->fmt, err, errlen);
         if (!b->um) goto fail;
         b->um_gen = atomic_load(&b->upmix_gen);
     }
     b->tone_gen = -1;   // the worker sets up tone with the first chunk
     b->fifo = av_audio_fifo_alloc(b->fmt, b->enc_layout.nb_channels, b->pcm ? CHUNK * 2 : pc_enc_frame_size(b->enc) * 4);
+    b->um_out = b->tone_out = b->fifo;
+    if (b->autodetect) {
+        b->fifo_up = av_audio_fifo_alloc(b->fmt, b->enc_layout.nb_channels, MIX_MAX);
+        b->fifo_pass = av_audio_fifo_alloc(b->fmt, b->enc_layout.nb_channels, MIX_MAX);
+        if (!b->fifo_up || !b->fifo_pass ||
+            av_samples_alloc_array_and_samples(&b->mix_a, NULL, b->enc_layout.nb_channels, MIX_MAX, b->fmt, 0) < 0 ||
+            av_samples_alloc_array_and_samples(&b->mix_b, NULL, b->enc_layout.nb_channels, MIX_MAX, b->fmt, 0) < 0) {
+            snprintf(err, errlen, "Out of memory");
+            goto fail;
+        }
+        b->um_out = b->fifo_up;
+        b->tone_out = b->fifo_pass;
+    }
 
     char lay[64] = "";
     av_channel_layout_describe(&b->enc_layout, lay, sizeof(lay));
     pc_mutex_lock(&b->lock);
     if (b->pcm)
         snprintf(b->out_desc, sizeof(b->out_desc), "PCM %s 48 kHz%s, exclusive -> %s", lay,
-                 b->upmixing ? " (upmixed from stereo)" : "", pc_out_description(b->out));
+                 b->autodetect ? " (stereo upmixed, multichannel passed through)" : b->upmixing ? " (upmixed from stereo)" : "",
+                 pc_out_description(b->out));
     else
         snprintf(b->out_desc, sizeof(b->out_desc), "%s %s %lld kb/s%s, IEC 61937 -> %s", dts ? "DTS" : "Dolby Digital", lay,
-                 (long long)(pc_enc_bit_rate(b->enc) / 1000), b->upmixing ? " (upmixed from stereo)" : "", pc_out_description(b->out));
+                 (long long)(pc_enc_bit_rate(b->enc) / 1000),
+                 b->autodetect ? " (stereo upmixed, multichannel passed through)" : b->upmixing ? " (upmixed from stereo)" : "",
+                 pc_out_description(b->out));
     pc_mutex_unlock(&b->lock);
 
     // 5. go: output first (it plays keep-alive silence until data arrives), then the input
@@ -740,13 +902,19 @@ void sb_bridge_stop(SBBridge *b) {
     pc_upmix_free(&b->um);
     pc_upmix_free(&b->tone);
     swr_free(&b->swr);
+    swr_free(&b->remix);
     if (b->fifo) { av_audio_fifo_free(b->fifo); b->fifo = NULL; }
+    if (b->fifo_up) { av_audio_fifo_free(b->fifo_up); b->fifo_up = NULL; }
+    if (b->fifo_pass) { av_audio_fifo_free(b->fifo_pass); b->fifo_pass = NULL; }
+    if (b->mix_a) { av_freep(&b->mix_a[0]); av_freep(&b->mix_a); }
+    if (b->mix_b) { av_freep(&b->mix_b[0]); av_freep(&b->mix_b); }
     avcodec_free_context(&b->idec);
     avformat_close_input(&b->ifmt);
     av_freep(&b->ring);
     free_cfg_strings(b);
     b->running = 0;
     b->upmixing = 0;
+    b->autodetect = 0;
     b->pcm = 0;
 }
 

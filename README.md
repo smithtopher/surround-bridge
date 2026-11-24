@@ -44,7 +44,7 @@ Everything applies while it plays.
 
 ## Install (Windows 10/11, 64-bit)
 
-1. Open **SurroundBridge-Setup-1.3.0-windows-x64.exe**. It isn't code-signed yet, so Windows
+1. Open **SurroundBridge-Setup-1.3.1-windows-x64.exe**. It isn't code-signed yet, so Windows
    SmartScreen may warn the first time: **More info** → **Run anyway**.
 2. Click **Install**. It installs for your account only (no administrator password), adds a Start menu
    shortcut, and starts. Surround Bridge lives in the **notification area** of the taskbar (the
@@ -61,12 +61,13 @@ The settings, upmix and tone controls are the same as on the Mac, including **Mu
 AV receiver connected by HDMI. If nothing reaches the amp, check that the HDMI/optical device allows
 exclusive mode (Sound settings ▸ the device ▸ Advanced).
 
-**5.1 and 7.1 from apps (Windows 1.3.0):** the cable is stereo out of the box, so apps mix 5.1 down
-to stereo and the bridge upmixes it. To get real 5.1 through, set **CABLE Input** to 5.1 or 7.1
-(Sound settings ▸ More sound settings ▸ CABLE Input ▸ Configure) and **CABLE Output** to the same
-channel count (Recording ▸ CABLE Output ▸ Properties ▸ Advanced). With more than 2 channels the
-bridge passes everything through as it is, tone included, and doesn't upmix (stereo then stays
-stereo, in the front speakers).
+**5.1 and 7.1 from apps:** the cable is stereo out of the box, so apps mix 5.1 down to stereo and
+the bridge upmixes it. To get real 5.1 through, set **CABLE Input** to 5.1 or 7.1 once (Sound
+settings ▸ More sound settings ▸ CABLE Input ▸ Configure) and **CABLE Output** to the same channel
+count (Recording ▸ CABLE Output ▸ Properties ▸ Advanced), and leave it there. The bridge then
+listens to what's playing: 5.1 passes through as it is; stereo (sound only in the front pair for
+a few seconds) is upmixed, with a short crossfade when it changes. Tone applies to both. With the
+upmix off, stereo stays in the front speakers.
 
 **Uninstall:** Settings ▸ About ▸ Uninstall, or Windows Settings ▸ Apps ▸ Installed apps ▸ Surround
 Bridge. VB-Audio Virtual Cable stays (remove it with its own setup's "Remove Driver").

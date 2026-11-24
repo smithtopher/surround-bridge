@@ -264,5 +264,56 @@ run "$W/quad.flac" "$W/q.spdif" && {
     [ "${r#* }" = "300.0 500.0 - - 1100.0 1300.0" ] && pass "quad input (ac3): ${r#* }" || fail "quad input (ac3): '${r#* }'"
 }
 
+echo "auto: a 5.1 cable carrying stereo, then 5.1 (stereo is upmixed, 5.1 passes through)"
+# 13 s of 5.1: one tone per channel (0-4 s), stereo only (a centred 1 kHz in FL/FR, the rest
+# exact zeros, as Windows fills a 5.1 cable for a stereo app: 4-9 s), then 5.1 again (9-13 s)
+B='between(t\,4\,9)'
+ff -f lavfi -i "aevalsrc=0.2*if($B\,sin(2*PI*1000*t)\,sin(2*PI*300*t))|0.2*if($B\,sin(2*PI*1000*t)\,sin(2*PI*500*t))|0.2*sin(2*PI*700*t)*(1-$B)|0.2*sin(2*PI*60*t)*(1-$B)|0.2*sin(2*PI*1100*t)*(1-$B)|0.2*sin(2*PI*1300*t)*(1-$B):s=48000:d=13:c=5.1(side)" \
+   -t 13 -c:a flac -sample_fmt s32 "$W/auto.flac"
+cat > "$W/seg.py" <<'EOF'
+# f32le, N channels, seconds t0..t1: the zero-crossing frequency of each channel ('-' = silent)
+import sys
+from array import array
+a = array('f'); a.frombytes(open(sys.argv[1], 'rb').read()); ch = int(sys.argv[2]); rate = 48000
+t0, t1 = float(sys.argv[3]), float(sys.argv[4])
+seg = a[int(t0 * rate) * ch: int(t1 * rate) * ch]; m = len(seg) // ch
+fr = []
+for c in range(ch):
+    x = seg[c::ch]; peak = max(abs(v) for v in x)
+    fr.append('-' if peak < 1e-3 else str(round(sum(1 for i in range(1, m) if (x[i-1] < 0) != (x[i] < 0)) / 2 / (m / rate), -1)))
+print(' '.join(fr))
+EOF
+cat > "$W/whole.py" <<'EOF'
+# f32le, N channels: frame count and peak
+import sys
+from array import array
+a = array('f'); a.frombytes(open(sys.argv[1], 'rb').read()); ch = int(sys.argv[2])
+print(len(a) // ch, '%.3f' % max(abs(v) for v in a))
+EOF
+SIX="300.0 500.0 700.0 60.0 1100.0 1300.0"
+auto_check() { # label raw
+    local r
+    r=$("$PY" -I "$W/seg.py" "$2" 6 1 3.5);    [ "$r" = "$SIX" ] && pass "$1, 5.1 at the start: passed through ($r)" || fail "$1, 5.1 at the start: '$r'"
+    r=$("$PY" -I "$W/seg.py" "$2" 6 4.5 6.5);  [ "$r" = "1000.0 1000.0 - - - -" ] && pass "$1, stereo, first 3 s: still passed through ($r)" || fail "$1, stereo, first 3 s: '$r'"
+    r=$("$PY" -I "$W/seg.py" "$2" 6 7.6 8.9);  case "$r" in "1000.0 1000.0 1000.0 "*) pass "$1, stereo after 3 s: upmixed, centre speaker on ($r)";; *) fail "$1, stereo after 3 s: not upmixed '$r'";; esac
+    r=$("$PY" -I "$W/seg.py" "$2" 6 9.2 12.5); [ "$r" = "$SIX" ] && pass "$1, 5.1 again: passed through at once ($r)" || fail "$1, 5.1 again: '$r'"
+    r=$("$PY" -I "$W/whole.py" "$2" 6)
+    "$PY" -c "import sys; n, pk = int(sys.argv[1]), float(sys.argv[2]); sys.exit(0 if abs(n - 624000) <= 1536 * 2 and pk <= 1.0 else 1)" ${r} \
+        && pass "$1: $r (frames, peak)" || fail "$1: frames/peak $r, want ~624000 and <= 1"
+}
+run "$W/auto.flac" "$W/au.raw" --pcm && auto_check "auto pcm" "$W/au.raw"
+run "$W/auto.flac" "$W/au.spdif" && { ff -f spdif -i "$W/au.spdif" -f f32le "$W/au3.raw"; auto_check "auto ac3" "$W/au3.raw"; }
+run "$W/auto.flac" "$W/ad.spdif" --dts && { ff -f spdif -i "$W/ad.spdif" -f f32le "$W/aud.raw"; auto_check "auto dts" "$W/aud.raw"; }
+run "$W/auto.flac" "$W/at.raw" --pcm --upmix-set bass=6,treble=6 && auto_check "auto pcm with tone" "$W/at.raw"
+ff -f lavfi -i "aevalsrc=0.2*sin(2*PI*1000*t)|0.2*sin(2*PI*1000*t)|0|0|0|0:s=48000:d=6:c=5.1(side)" -t 6 -c:a flac -sample_fmt s32 "$W/auto2.flac"
+run "$W/auto2.flac" "$W/a2.raw" --pcm && {
+    r=$("$PY" -I "$W/seg.py" "$W/a2.raw" 6 0.2 2)
+    case "$r" in "1000.0 1000.0 1000.0 "*) pass "auto: stereo from the start is upmixed at once ($r)";; *) fail "auto: stereo from the start: '$r'";; esac
+}
+run "$W/auto.flac" "$W/an.raw" --pcm --no-upmix && {
+    r=$("$PY" -I "$W/seg.py" "$W/an.raw" 6 7.6 8.9)
+    [ "$r" = "1000.0 1000.0 - - - -" ] && pass "upmix off: stereo in a 5.1 cable stays in front ($r)" || fail "upmix off: '$r'"
+}
+
 [ $FAIL = 0 ] && echo "ALL PASSED" || echo "SOME CHECKS FAILED"
 exit $FAIL

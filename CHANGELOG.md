@@ -1,5 +1,14 @@
 # Changelog
 
+## [Windows 1.3.1] — 2026-11-24
+
+- **Stereo or 5.1 is decided from the sound, not the cable's setting.** 1.3.0 decided by the
+  channel count, but Windows mixes every app into the cable's format before the bridge sees it,
+  so you had to switch Windows between stereo and 5.1 by hand. Now leave CABLE Input at 5.1 or 7.1:
+  when anything plays outside the front left/right pair, it passes through as it is (at once);
+  when only the front pair plays for 3 seconds, it's upmixed. The change crossfades over 43 ms.
+  Pauses and silence don't change it. Tone applies either way.
+
 ## [Windows 1.3.0] — 2026-11-24
 
 - **Upmix or pass-through by the cable's channel count.** With CABLE Input set to 1 or 2

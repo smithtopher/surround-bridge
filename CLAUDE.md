@@ -171,12 +171,25 @@ scripts/build_ffmpeg*.sh   same as Surround Player's (static 9.0.2, avfilter wit
 - **Latency estimate** (`SBStatus.latency_ms`): capture IO + half a chunk + upmix 2048 samples + one
   encoder frame + ring fill + device latency. Expect roughly 120–150 ms with AC3 and upmix; needs measuring.
 - **Upmix defaults** = Surround Player's "Music" preset.
-- **Upmix or pass-through by input channel count (2026-11-24, unreleased):** 1–2 channels → upmix
-  (if on) or stereo; more than 2 → passed through as they are (5.1 for AC3/DTS and PCM from 3–6,
-  7.1 for PCM from 7–8), tone still applied. The input's speaker positions come from
+- **Multichannel input (Windows 1.3.0):** more than 2 channels → 5.1 out for AC3/DTS and PCM from
+  3–6, 7.1 for PCM from 7–8, tone still applied. The input's speaker positions come from
   `PCCaptureFormat.channel_mask` (WASAPI's WAVEFORMATEXTENSIBLE mask; the file's layout in file
   mode; 0 on the Mac → FFmpeg's default for the count), so quad's back pair lands on the surrounds.
   regress "more than 2 input channels pass through".
+  - **1.3.0 decided by the channel count alone, which can't work:** Windows' shared-mode engine
+    mixes every app into the cable's format (Sound settings) before VB-Cable sees it, so the
+    capture side never knows what the app sent. The user had to switch Windows between 2 and 6
+    channels by hand.
+  - **Auto (`b->autodetect`, Windows 1.3.1, 2026-11-24): upmix on and more than 2 input channels →
+    decided from the audio.** Both paths run all the time: swr to the input's own layout (fltp),
+    FL/FR into the upmix graph (`fifo_up`), everything through `b->remix` (no resampling) + tone
+    into `fifo_pass`; `auto_mix` sends one to `b->fifo` and discards the other. Anything above
+    −90 dBFS (`AUTO_SILENT`) outside FL/FR → pass-through at once; FL/FR alone for 3 s
+    (`AUTO_HOLD`) → upmix; silence changes nothing (pauses don't flip it); the first sound
+    decides without a fade. Switches crossfade linearly over 2048 samples (waits for the upmix's
+    next hop). The upmix path is 43 ms behind, so a switch repeats/skips 43 ms (accepted rather
+    than delaying 5.1 all the time). PCM 7.1 + upmix: the graph's back pair stays BL/BR.
+    regress "auto" (5.1 → stereo-in-5.1 → 5.1 for PCM/AC3/DTS/tone, stereo from the start).
 - **Multichannel PCM (`SB_CODEC_PCM`, Mac 1.2.0, 2026-11-23):**
   - No encoder (`b->enc` NULL, `b->pcm`). Output: `pc_out_open(PC_STREAM_PCM_EXCLUSIVE)`, the
     shared CoreAudio/WASAPI path from Surround Player, asking for 5.1(side) 48 kHz when upmixed,
