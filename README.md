@@ -9,7 +9,7 @@ It's built for setups where the amp only takes compressed surround (e.g. compute
 optical → AC3 amp), where multichannel PCM isn't an option.
 
 Downloads are on the [`releases` branch](https://github.com/smithtopher/surround-bridge/tree/releases)
-(`Windows/`, and `macOS/` once the Mac build is added there).
+(`Windows/`, and `macOS/`).
 
 ## Install (macOS 14+)
 
@@ -118,6 +118,6 @@ Not decided yet for the app. FFmpeg is used under the LGPL. The Mac's virtual au
 [driver/README.md](driver/README.md) for what was changed. It's not an official BlackHole build and
 doesn't use BlackHole's name or branding. The app is a separate program that uses the device through
 CoreAudio. VB-Audio Virtual Cable is donationware whose licence
-doesn't allow bundling, so the Windows app likewise downloads VB-Audio's official package. "Dolby
-Digital" and "DTS" are trademarks of their owners; this project isn't affiliated with or licensed by
-them, or by Existential Audio or VB-Audio.
+doesn't allow bundling, so the Windows app downloads VB-Audio's official package. "Dolby Digital" 
+and "DTS" are trademarks of their owners; this project isn't affiliated with or licensed by them, 
+or by Existential Audio or VB-Audio.
