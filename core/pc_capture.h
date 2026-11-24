@@ -22,6 +22,7 @@ typedef struct {
     int channels;           // what the device delivers (2 for BlackHole 2ch; 6/8 for multichannel)
     double rate;            // Hz (the back-end asks for 48 kHz, but the device may run at another rate)
     double latency;         // seconds from the app's sample reaching the device to our callback
+    uint32_t channel_mask;  // the device's speaker positions (WAVE SPEAKER_* == AV_CH_* bits), 0 = unknown
     char description[256];
 } PCCaptureFormat;
 

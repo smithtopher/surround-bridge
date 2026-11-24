@@ -177,6 +177,17 @@ static void on_capture(void *ctx, const float *data, int frames, int64_t ns) {
 // ---------------------------------------------------------------------------
 // testing input: a media file decoded into the ring (paced at real time, or as fast as it goes)
 
+// The input's speaker positions: the device's (or file's) mask when it matches the channel count,
+// else FFmpeg's default for the count. E.g. VB-Cable set to 5.1 reports 5.1 with back surrounds,
+// quad has a back pair, not FFmpeg's default 4.0.
+static void input_layout(const SBBridge *b, AVChannelLayout *lay) {
+    if (!b->capfmt.channel_mask || av_channel_layout_from_mask(lay, b->capfmt.channel_mask) < 0 ||
+        lay->nb_channels != b->in_ch) {
+        av_channel_layout_uninit(lay);
+        av_channel_layout_default(lay, b->in_ch);
+    }
+}
+
 static int open_input_file(SBBridge *b, const char *path, char *err, int errlen) {
     if (avformat_open_input(&b->ifmt, path, NULL, NULL) < 0 || avformat_find_stream_info(b->ifmt, NULL) < 0) {
         snprintf(err, errlen, "Could not open %s", path);
@@ -192,6 +203,8 @@ static int open_input_file(SBBridge *b, const char *path, char *err, int errlen)
         return -1;
     }
     b->in_ch = par->ch_layout.nb_channels > 8 ? 8 : par->ch_layout.nb_channels;
+    b->capfmt.channel_mask = par->ch_layout.order == AV_CHANNEL_ORDER_NATIVE && par->ch_layout.nb_channels <= 8
+                                 ? (uint32_t)par->ch_layout.u.mask : 0;
     b->in_rate = 48000;   // the feeder resamples, like a virtual device running at 48 kHz
     snprintf(b->capfmt.description, sizeof(b->capfmt.description), "file %s (%d ch, %s)", path, b->in_ch,
              b->cfg.input_realtime ? "real time" : "as fast as possible");
@@ -207,7 +220,7 @@ static void *feeder_thread(void *arg) {
     int buf_frames = 0;
     int64_t pushed = 0, t0 = pc_now_ns();
     AVChannelLayout lay = { 0 };
-    av_channel_layout_default(&lay, b->in_ch);
+    input_layout(b, &lay);
     int done = 0;
     while (!done && !atomic_load(&b->quit)) {
         int r = av_read_frame(b->ifmt, pkt);
@@ -590,6 +603,7 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
         if (open_input_file(b, b->cfg.input_file, err, errlen) < 0) goto fail;
     } else {
 #if PC_HAVE_CAPTURE
+        b->capfmt.channel_mask = 0;   // the Mac back-end doesn't report one
         b->cap = pccap_open(b->cfg.input_uid, &b->capfmt, err, errlen);
         if (!b->cap) goto fail;
         b->in_ch = b->capfmt.channels > 8 ? 8 : b->capfmt.channels;
@@ -603,21 +617,23 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
     b->ring = av_calloc((size_t)b->ring_frames * b->in_ch, sizeof(float));
     if (!b->ring) { snprintf(err, errlen, "Out of memory"); goto fail; }
 
-    // 2. what goes out: upmixed 5.1 (stereo in, upmix on), 5.1 (multichannel in) or 2.0
+    // 2. what goes out, decided by the input's channel count: 1 or 2 channels are upmixed to 5.1
+    //    (upmix on) or stay stereo; more than 2 pass through as they are (5.1, or 7.1 for PCM from
+    //    7 or 8), tone still applied
     PCUpmix up = upmix_settings(b);
     b->upmixing = up.enabled && b->in_ch <= 2;
     // upmixed: the graph makes 5.1 with back surrounds, its aformat stage moves them to the side
     // pair, the layout both encoders take (FFmpeg's DTS encoder has no 5.1(back)) and the one
     // HDMI receivers expect for 5.1 PCM
     if (b->upmixing) b->enc_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT1;
-    else if (b->in_ch >= 6) b->enc_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT1;
+    else if (b->in_ch > 2) b->enc_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT1;
     else b->enc_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
     b->pcm = b->cfg.codec == SB_CODEC_PCM;
     int dts = b->cfg.codec == SB_CODEC_DTS;
     if (b->pcm) {
         // 3. multichannel PCM, exclusive: ask for the layout, then lay the audio out the way the
         //    device opened (its channel count and speaker order; pc_output converts the samples)
-        if (!b->upmixing && b->in_ch >= 8) b->enc_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_7POINT1;
+        if (!b->upmixing && b->in_ch >= 7) b->enc_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_7POINT1;
         PCDeviceFormat req = { 0 };
         req.channels = b->enc_layout.nb_channels;
         req.rate = 48000;
@@ -661,7 +677,7 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
 
     // 4. converters: the input's channels/rate -> 48 kHz planar (stereo for the upmix)
     AVChannelLayout in_lay = { 0 }, stereo = AV_CHANNEL_LAYOUT_STEREO;
-    av_channel_layout_default(&in_lay, b->in_ch);
+    input_layout(b, &in_lay);
     if (swr_alloc_set_opts2(&b->swr, b->upmixing ? &stereo : &b->enc_layout,
                             b->upmixing ? AV_SAMPLE_FMT_FLTP : b->fmt, 48000,
                             &in_lay, AV_SAMPLE_FMT_FLT, (int)lrint(b->in_rate), 0, NULL) < 0 || swr_init(b->swr) < 0) {

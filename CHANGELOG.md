@@ -1,5 +1,16 @@
 # Changelog
 
+## [Windows 1.3.0] — 2026-11-24
+
+- **Upmix or pass-through by the cable's channel count.** With CABLE Input set to 1 or 2
+  channels, stereo is upmixed to 5.1 as before (or stays stereo with the upmix off). Set it to
+  more than 2 (Sound settings ▸ CABLE Input ▸ Configure speakers, e.g. 5.1 or 7.1) and what apps
+  play passes through to the speakers they were meant for, with bass and treble boost still
+  applied: 5.1 for Dolby Digital and DTS, 5.1 or 7.1 for multichannel PCM. 3-, 4- and 5-channel
+  input used to be mixed down to stereo; it now passes through too.
+- The bridge reads the cable's speaker layout from Windows instead of guessing it from the
+  channel count, so quad's rear pair, for example, lands on the surround speakers.
+
 ## [Windows 1.2.0] — 2026-11-23 (the Mac code is updated but not yet built)
 
 - **Bass and treble boost work on everything now**, not only while the upmix is on: plain stereo

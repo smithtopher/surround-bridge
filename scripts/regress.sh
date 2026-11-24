@@ -230,5 +230,39 @@ print(('ok ' if abs(len(x) - 288000) <= 1536 and step < 0.05 else 'BAD ') + '%d 
     case "$r" in ok*) pass "tone toggled live ${n}x: ${r#ok }";; *) fail "tone toggled live: ${r#BAD }";; esac
 }
 
+echo "more than 2 input channels pass through (upmix on, so nothing is upmixed), speakers kept"
+# a file with one tone per channel: layout name, then channel=frequency pairs
+tones() { # name layout CH=f ...
+    local name=$1 lay=$2; shift 2
+    local args=() map="" i=0
+    for cf in "$@"; do args+=(-f lavfi -i "sine=f=${cf#*=}:sample_rate=48000"); map+="${map:+|}$i.0-${cf%%=*}"; i=$((i + 1)); done
+    ff "${args[@]}" -filter_complex "join=inputs=$i:channel_layout=$lay:map=$map[a]" -map "[a]" -t 6 -c:a flac "$W/$name.flac"
+}
+passthru() { # label file want(6 ch FL FR FC LFE SL SR) [extra args]
+    local label=$1 f=$2 want=$3; shift 3
+    run "$W/$f.flac" "$W/pt.raw" --pcm "$@" && {
+        local r; r=$("$PY" -I "$W/rawfreqs.py" "$W/pt.raw" 6)
+        [ "${r#* }" = "$want" ] && pass "$label: ${r#* }" || fail "$label: '${r#* }', want '$want'"
+    }
+}
+tones three 3.0 FL=300 FR=500 FC=700
+tones quad quad FL=300 FR=500 BL=1100 BR=1300
+tones five "5.0(side)" FL=300 FR=500 FC=700 SL=1100 SR=1300
+tones sevenone 7.1 FL=300 FR=500 FC=700 LFE=60 BL=1500 BR=1700 SL=1100 SR=1300
+passthru "3.0 input (pcm)" three "300.0 500.0 700.0 - - -"
+passthru "quad input, back pair to the surrounds (pcm)" quad "300.0 500.0 - - 1100.0 1300.0"
+passthru "5.0 input (pcm)" five "300.0 500.0 700.0 - 1100.0 1300.0"
+passthru "5.0 input with tone (pcm)" five "300.0 500.0 700.0 - 1100.0 1300.0" --upmix-set bass=6,treble=6
+run "$W/sevenone.flac" "$W/p8.raw" --pcm && {
+    r=$("$PY" -I "$W/rawfreqs.py" "$W/p8.raw" 8)
+    [ "${r#* }" = "300.0 500.0 700.0 60.0 1500.0 1700.0 1100.0 1300.0" ] && pass "7.1 input stays 7.1 (pcm): ${r#* }" || fail "7.1 input (pcm): '${r#* }'"
+}
+run "$W/quad.flac" "$W/q.spdif" && {
+    stream "quad input (ac3)" "$W/q.spdif" ac3 "5.1(side)" 6144
+    ff -f spdif -i "$W/q.spdif" -f f32le "$W/q.raw"
+    r=$("$PY" -I "$W/rawfreqs.py" "$W/q.raw" 6)
+    [ "${r#* }" = "300.0 500.0 - - 1100.0 1300.0" ] && pass "quad input (ac3): ${r#* }" || fail "quad input (ac3): '${r#* }'"
+}
+
 [ $FAIL = 0 ] && echo "ALL PASSED" || echo "SOME CHECKS FAILED"
 exit $FAIL

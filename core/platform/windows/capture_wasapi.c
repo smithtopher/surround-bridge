@@ -276,6 +276,7 @@ PCCapture *pccap_open(const char *uid, PCCaptureFormat *fmt, char *err, int errl
 
     fmt->channels = c->channels;
     fmt->rate = c->rate;
+    fmt->channel_mask = mix->wFormatTag == WAVE_FORMAT_EXTENSIBLE ? ((const WAVEFORMATEXTENSIBLE *)mix)->dwChannelMask : 0;
     // a packet waits up to one device period, plus our poll interval
     fmt->latency = (double)(lat + period) / 1e7 + CAP_POLL_MS / 2000.0;
     snprintf(fmt->description, sizeof(fmt->description), "%s%s, %d ch float %.0f Hz, shared%s", name,

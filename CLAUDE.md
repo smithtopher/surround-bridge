@@ -171,6 +171,12 @@ scripts/build_ffmpeg*.sh   same as Surround Player's (static 9.0.2, avfilter wit
 - **Latency estimate** (`SBStatus.latency_ms`): capture IO + half a chunk + upmix 2048 samples + one
   encoder frame + ring fill + device latency. Expect roughly 120–150 ms with AC3 and upmix; needs measuring.
 - **Upmix defaults** = Surround Player's "Music" preset.
+- **Upmix or pass-through by input channel count (2026-11-24, unreleased):** 1–2 channels → upmix
+  (if on) or stereo; more than 2 → passed through as they are (5.1 for AC3/DTS and PCM from 3–6,
+  7.1 for PCM from 7–8), tone still applied. The input's speaker positions come from
+  `PCCaptureFormat.channel_mask` (WASAPI's WAVEFORMATEXTENSIBLE mask; the file's layout in file
+  mode; 0 on the Mac → FFmpeg's default for the count), so quad's back pair lands on the surrounds.
+  regress "more than 2 input channels pass through".
 - **Multichannel PCM (`SB_CODEC_PCM`, Mac 1.2.0, 2026-11-23):**
   - No encoder (`b->enc` NULL, `b->pcm`). Output: `pc_out_open(PC_STREAM_PCM_EXCLUSIVE)`, the
     shared CoreAudio/WASAPI path from Surround Player, asking for 5.1(side) 48 kHz when upmixed,
