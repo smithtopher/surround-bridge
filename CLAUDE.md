@@ -198,7 +198,15 @@ scripts/build_ffmpeg*.sh   same as Surround Player's (static 9.0.2, avfilter wit
     `st2`) of every frame beside the 5.1 encoder, so both stay warm and in step; `send_bursts`
     sends the one `stereo_out` picks, decided before the chunk enters the fifo (5.1 sound is
     never encoded as 2.0). The keep-alive silence burst stays the 5.1 one (pc_output sets it once;
-    only plays on underruns). Not for PCM (the device's channel count is fixed at open).
+    only plays on underruns).
+  - **PCM (Windows 1.3.3, 2026-11-24):** PCM has no flag in the stream; the amp reads the channel
+    count from the HDMI format. So with PCM, `stereo_out` changing calls `pcm_reopen`: close the
+    exclusive output and open it again at 2 channels (or `pcm_multi`, the start layout), new
+    fifo/remix/tone in the new layout, drop the input that piled up (`skip_in`), pad, restart
+    steering (`reset_steer`). Up to 3 tries; if 2 ch won't open, back to multichannel with
+    auto off. `b->out` swaps under `b->lock` (sb_bridge_status reads it). The file sink isn't
+    reopened: it keeps going and logs "pcm format: N ch from output frame F" (regress splits
+    the dump there). **Only tested in file mode**: the live reopen hasn't run on a device.
     `SBStatus.out_channels` = what goes out now; the status lines use it. Checked: AC3 switch has
     no step beyond the tone's slope; FFmpeg's DTS decoder ramps in over ~6 ms at 5.1 → 2.0 (it
     does the same on an FFmpeg-only stream). regress "auto stream" (per-frame channel counts).

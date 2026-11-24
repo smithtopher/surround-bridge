@@ -1,5 +1,13 @@
 # Changelog
 
+## [Windows 1.3.3] — 2026-11-24
+
+- **Multichannel PCM too: stereo goes out as 2-channel PCM** with the upmix off and the cable at
+  5.1 or 7.1, so the amp's own upmix can be used. PCM has no flag in the stream (the amp reads
+  the HDMI format), so the bridge reopens the HDMI output at 2 channels after 3 seconds of
+  stereo, and at 5.1 or 7.1 as soon as multichannel plays. Each change is a short silence while
+  the TV and amp switch over.
+
 ## [Windows 1.3.2] — 2026-11-24
 
 - **With the upmix off, stereo goes out as a 2.0 stream** (Dolby Digital and DTS, cable at 5.1 or

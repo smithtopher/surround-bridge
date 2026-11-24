@@ -310,10 +310,6 @@ run "$W/auto2.flac" "$W/a2.raw" --pcm && {
     r=$("$PY" -I "$W/seg.py" "$W/a2.raw" 6 0.2 2)
     case "$r" in "1000.0 1000.0 1000.0 "*) pass "auto: stereo from the start is upmixed at once ($r)";; *) fail "auto: stereo from the start: '$r'";; esac
 }
-run "$W/auto.flac" "$W/an.raw" --pcm --no-upmix && {
-    r=$("$PY" -I "$W/seg.py" "$W/an.raw" 6 7.6 8.9)
-    [ "$r" = "1000.0 1000.0 - - - -" ] && pass "upmix off: stereo in a 5.1 cable stays in front ($r)" || fail "upmix off: '$r'"
-}
 
 echo "auto stream: upmix off, a 5.1 cable: stereo goes out as a 2.0 stream (the amp can upmix it)"
 cat > "$W/frames.py" <<'EOF'
@@ -352,6 +348,47 @@ run "$W/auto.flac" "$W/au5.spdif" && {
     r=$("$PY" -I "$W/frames.py" "$W/fr.txt" 0-12.8)
     [ "$r" = "6" ] && pass "upmix on: the stream stays 5.1 throughout ($r)" || fail "upmix on, stream: '$r'"
 }
+
+echo "auto stream, PCM: upmix off, a 5.1 cable: the output reopens at 2 channels while stereo plays"
+cat > "$W/pcmsegs.py" <<'EOF'
+# a PCM dump whose channel count changes ("pcm format: N ch from output frame F" in the log):
+# the formats with the time they start, then the zero-crossing frequencies in given time spans
+import sys, re
+from array import array
+a = array('f'); a.frombytes(open(sys.argv[1], 'rb').read()); rate = 48000
+sw = [(0, int(sys.argv[3]))] + [(int(f), int(c)) for c, f in re.findall(r'pcm format: (\d+) ch from output frame (\d+)', open(sys.argv[2]).read())]
+segs, pos = [], 0   # (start frame, channels, sample offset)
+for i, (f, c) in enumerate(sw):
+    segs.append((f, c, pos))
+    end = sw[i + 1][0] if i + 1 < len(sw) else (len(a) - pos) // c + f
+    pos += (end - f) * c
+print('formats:', ' '.join('%dch@%.2fs' % (c, f / rate) for f, c, _ in segs))
+for span in sys.argv[4:]:
+    t0, t1 = map(float, span.split('-')); f0, f1 = int(t0 * rate), int(t1 * rate)
+    seg = [s for s in segs if s[0] <= f0][-1]; f, c, off = seg
+    x = a[off + (f0 - f) * c: off + (f1 - f) * c]; m = len(x) // c
+    fr = []
+    for k in range(c):
+        y = x[k::c]; pk = max(abs(v) for v in y)
+        fr.append('-' if pk < 1e-3 else str(round(sum(1 for i in range(1, m) if (y[i-1] < 0) != (y[i] < 0)) / 2 / (m / rate), -1)))
+    print('%s: %s' % (span, ' '.join(fr)))
+EOF
+run "$W/auto.flac" "$W/ap.raw" --pcm --no-upmix && {
+    "$PY" -I "$W/pcmsegs.py" "$W/ap.raw" "$W/log.txt" 6 1-3.5 7.5-8.6 9.6-12.5 > "$W/ps.txt"
+    f=$(sed -n 1p "$W/ps.txt")
+    "$PY" -c "import re, sys; m = re.fullmatch(r'formats: 6ch@0.00s 2ch@([\d.]+)s 6ch@([\d.]+)s', sys.argv[1]); sys.exit(0 if m and 6.9 < float(m[1]) < 7.2 and 8.95 < float(m[2]) < 9.1 else 1)" "$f" \
+        && pass "pcm auto stream: $f (2 channels 3 s into the stereo, 6 as soon as 5.1 is back)" || fail "pcm auto stream: $f, want 6ch, then 2ch at ~7 s, 6ch at ~9 s"
+    r=$(sed -n 2p "$W/ps.txt"); [ "${r#*: }" = "$SIX" ] && pass "pcm auto stream: 5.1 in place ($r)" || fail "pcm auto stream, 5.1: '$r'"
+    r=$(sed -n 3p "$W/ps.txt"); [ "${r#*: }" = "1000.0 1000.0" ] && pass "pcm auto stream: stereo as 2 channels ($r)" || fail "pcm auto stream, stereo: '$r'"
+    r=$(sed -n 4p "$W/ps.txt"); [ "${r#*: }" = "$SIX" ] && pass "pcm auto stream: 5.1 again ($r)" || fail "pcm auto stream, 5.1 again: '$r'"
+}
+run "$W/auto2.flac" "$W/ap2.raw" --pcm --no-upmix && {
+    "$PY" -I "$W/pcmsegs.py" "$W/ap2.raw" "$W/log.txt" 6 1-5 > "$W/ps.txt"
+    f=$(sed -n 1p "$W/ps.txt"); r=$(sed -n 2p "$W/ps.txt")
+    case "$f" in "formats: 6ch@0.00s 2ch@0."*"s") [ "${r#*: }" = "1000.0 1000.0" ] && pass "pcm auto stream: stereo from the start goes to 2 channels at once ($f; $r)" || fail "pcm, stereo from the start: '$r'";;
+        *) fail "pcm, stereo from the start: $f";; esac
+}
+run "$W/auto.flac" "$W/apu.raw" --pcm && ! grep -q "pcm format" "$W/log.txt" && pass "pcm, upmix on: the output never reopens" || fail "pcm, upmix on: reopened"
 
 [ $FAIL = 0 ] && echo "ALL PASSED" || echo "SOME CHECKS FAILED"
 exit $FAIL
