@@ -1,12 +1,13 @@
 # Surround Bridge releases
 
 Downloads only; the source is on [`main`](https://github.com/smithtopher/surround-bridge/tree/main).
+The [user manual (PDF)](https://github.com/smithtopher/surround-bridge/blob/main/docs/Surround-Bridge-User-Manual.pdf) covers installing and using both versions.
 
 ## Windows
 
 | File | Version | Built from | SHA-256 |
 |---|---|---|---|
-| [Windows/SurroundBridge-Setup-1.3.3-windows-x64.exe](Windows/SurroundBridge-Setup-1.3.3-windows-x64.exe) | 1.3.3 | main 62e943c | `31afd8d8c86705f8cb648fc10401669e7b965bfd6c8d4ab359bc51889f7c4418` |
+| [Windows/SurroundBridge-Setup-1.3.4-windows-x64.exe](Windows/SurroundBridge-Setup-1.3.4-windows-x64.exe) | 1.3.4 | main e8e6611 | `4b69af7a466ef5a1fa174dbbff28fbf083b7b759e45c9abdfa63d6259a567672` |
 
 Windows 10/11, 64-bit, ~70 MB, nothing else to install. Open it and click **Install** (per user,
 no administrator rights). It isn't code-signed yet: if SmartScreen warns, **More info** → **Run anyway**.
