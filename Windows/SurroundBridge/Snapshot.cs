@@ -19,6 +19,18 @@ public static class Snapshot
 
         var flyout = new FlyoutWindow(model);
         Save(flyout, Path.Combine(dir, $"flyout-{theme}.png"));
+        // running, with the meters: stereo upmixed (2 in, 5.1 out), 5.1 passed through, and a 5.1
+        // cable carrying stereo with the upmix off (2 of 6 inputs in use, 2.0 out)
+        float[] two = { -9, -11 }, six = { -12, -10, -14, -22, -24, -26 }, upOut = { -11, -12, -15, -24, -27, -28 };
+        model.PreviewMeters(2, 0x3, 0x3, 6, 0x60F, two, upOut);
+        Save(flyout, Path.Combine(dir, $"flyout-meters-upmix-{theme}.png"));
+        model.PreviewMeters(6, 0x60F, 0x60F, 6, 0x60F, six, six);
+        Save(flyout, Path.Combine(dir, $"flyout-meters-51-{theme}.png"));
+        model.PreviewMeters(8, 0x63F, 0x63F, 8, 0x63F, new float[] { -12, -10, -14, -22, -24, -26, -20, -21 },
+                            new float[] { -12, -10, -14, -22, -24, -26, -20, -21 });
+        Save(flyout, Path.Combine(dir, $"flyout-meters-71-{theme}.png"));
+        model.PreviewMeters(6, 0x3F, 0x3, 2, 0x3, two, two);
+        Save(flyout, Path.Combine(dir, $"flyout-meters-stereo-in-51-{theme}.png"));
         model.PreviewState(BridgeState.NoVirtualDevice);   // the first-run notice
         Save(flyout, Path.Combine(dir, $"flyout-setup-{theme}.png"));
         model.PreviewState(BridgeState.Off);

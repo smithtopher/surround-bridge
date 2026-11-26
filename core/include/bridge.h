@@ -50,6 +50,12 @@ typedef struct {
     int channels;
     long long gaps;             // output underruns: silence played in place of audio (audible)
     int out_channels;           // what goes out now (2 while a 5.1 cable plays stereo with the upmix off)
+    float out_peak_db[8];       // output peak level per channel (out_mask's order), like peak_db
+    // speaker positions (AV_CH_* == WAVE SPEAKER_* bits; channel i = the i-th set bit, lowest
+    // first; 0 = unknown: the default order for the count)
+    unsigned int in_mask;       // the input's layout (peak_db's order)
+    unsigned int in_active;     // the input channels in use: FL|FR while a 5.1 cable plays stereo
+    unsigned int out_mask;      // what goes out now (out_peak_db's order)
 } SBStatus;
 
 PC_API SBBridge *sb_bridge_create(void);

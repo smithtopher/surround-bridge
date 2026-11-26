@@ -1,0 +1,479 @@
+<!doctype html>
+<!-- The user manual. scripts/make_manual.ps1 refreshes the screenshots (the app's --snapshot)
+     and prints this page to docs/Surround-Bridge-User-Manual.pdf with Edge. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Surround Bridge User Manual</title>
+<style>
+  @page { size: A4; margin: 18mm 17mm 20mm 17mm;
+          @bottom-center { content: counter(page); font: 9pt "Segoe UI", sans-serif; color: #8a8a93; } }
+  @page :first { @bottom-center { content: none; } }
+  :root { --accent: #5B57D6; --accent-2: #7B3FC4; --ink: #1d1d24; --muted: #5d5d68; --rule: #e3e3ea;
+          --card: #f6f6fa; --note: #fff6e8; --note-edge: #f0c27a; --tip: #eef0ff; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font: 10pt/1.45 "Segoe UI", "Segoe UI Variable Text", sans-serif; color: var(--ink); }
+  h1, h2, h3 { font-weight: 600; line-height: 1.25; break-after: avoid; }
+  h1 { font-size: 21pt; margin: 0 0 4mm; color: var(--accent); letter-spacing: -0.2px; }
+  h2 { font-size: 13pt; margin: 6mm 0 2mm; }
+  h3 { font-size: 11pt; margin: 5mm 0 1.5mm; }
+  p { margin: 0 0 2.6mm; }
+  ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin: 0 0 1.2mm; }
+  b, strong { font-weight: 600; }
+  .ui { font-weight: 600; }                                   /* names of buttons and settings */
+  .path { white-space: nowrap; }
+  code { font: 9.5pt Consolas, monospace; background: var(--card); padding: 0 1mm; border-radius: 2px; }
+  .chapter { break-before: page; }
+  .num { color: var(--accent); margin-right: 2.5mm; }
+  .lead { font-size: 11pt; color: var(--muted); margin-bottom: 5mm; }
+
+  /* cover */
+  .cover { height: 257mm; display: flex; flex-direction: column; }
+  .cover .band { background: linear-gradient(120deg, #2B4BB8 0%, var(--accent) 45%, var(--accent-2) 100%);
+                 color: #fff; border-radius: 6mm; padding: 16mm 14mm 14mm; }
+  .cover .band img { width: 30mm; height: 30mm; border-radius: 6mm; box-shadow: 0 2mm 6mm rgba(0,0,0,.25); }
+  .cover .band h1 { color: #fff; font-size: 34pt; margin: 9mm 0 2mm; }
+  .cover .band .sub { font-size: 14pt; opacity: .92; }
+  .cover .meta { margin-top: 9mm; color: var(--muted); font-size: 10.5pt; }
+  .cover .contents { margin-top: auto; }
+  .cover .contents h2 { margin-top: 0; }
+  .toc { list-style: none; padding: 0; columns: 2; column-gap: 10mm; }
+  .toc li { break-inside: avoid; margin-bottom: 2mm; }
+  .toc .n { color: var(--accent); font-weight: 600; display: inline-block; width: 7mm; }
+
+  /* figures */
+  figure { margin: 3mm 0 4mm; break-inside: avoid; text-align: center; }
+  figure img { max-width: 100%; border-radius: 2.5mm; box-shadow: 0 0.6mm 2.5mm rgba(20,20,40,.18); }
+  figcaption { font-size: 9pt; color: var(--muted); margin-top: 2mm; }
+  .side { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; align-items: start; break-inside: avoid; }
+  .side.wide-text { grid-template-columns: 1.25fr 1fr; }
+  .side figure { margin-top: 0; }
+  .fig-s img { width: var(--w, 68mm); }
+  .fig-m img { width: 82mm; }
+  .fig-l img { width: 118mm; }
+
+  /* boxes and tables */
+  .note, .tip { border-radius: 2.5mm; padding: 3mm 4mm; margin: 3mm 0 4mm; break-inside: avoid; }
+  .note { background: var(--note); border-left: 1.2mm solid var(--note-edge); }
+  .tip { background: var(--tip); border-left: 1.2mm solid var(--accent); }
+  .note p:last-child, .tip p:last-child { margin-bottom: 0; }
+  .label { font-weight: 600; margin-right: 1mm; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 9.5pt; break-inside: avoid; }
+  th { text-align: left; font-weight: 600; background: var(--card); color: var(--ink); }
+  th, td { padding: 1.5mm 2.5mm; border-bottom: 0.3mm solid var(--rule); vertical-align: top; }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+  td.nw { white-space: nowrap; }
+  .flow .box { padding: 2mm; }
+
+  /* steps */
+  ol.steps { list-style: none; counter-reset: s; padding-left: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 9mm; margin-bottom: 2.6mm; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 0.2mm; width: 6mm; height: 6mm;
+                          border-radius: 50%; background: var(--accent); color: #fff; font-weight: 600;
+                          font-size: 9pt; line-height: 6mm; text-align: center; }
+
+  /* the signal flow */
+  .flow { display: flex; align-items: stretch; gap: 0; margin: 4mm 0 5mm; break-inside: avoid; }
+  .flow .box { flex: 1; background: var(--card); border: 0.3mm solid var(--rule); border-radius: 2.5mm;
+               padding: 2.5mm 2.5mm; text-align: center; font-size: 9pt; }
+  .flow .box b { display: block; font-size: 9.8pt; margin-bottom: 0.8mm; }
+  .flow .box.us { background: var(--tip); border-color: #c9c8f3; }
+  .flow .arrow { width: 7mm; display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 13pt; }
+  .shot { position: relative; display: inline-block; }
+  .shot .m { position: absolute; transform: translate(-50%, -50%); width: 5.5mm; height: 5.5mm; border-radius: 50%;
+             background: var(--accent); color: #fff; font-size: 8.5pt; font-weight: 600; line-height: 5.5mm;
+             text-align: center; box-shadow: 0 0 0 0.6mm #fff; }
+  .fig-strip img { width: 62mm; }
+  .callouts { list-style: none; padding: 0; }
+  .callouts li { margin-bottom: 2mm; }
+  .callouts .k { display: inline-block; min-width: 5mm; height: 5mm; border-radius: 50%; background: var(--accent);
+                 color: #fff; font-size: 8pt; font-weight: 600; text-align: center; line-height: 5mm; margin-right: 1.5mm; }
+</style>
+</head>
+<body>
+
+<!-- ======================================================== cover -->
+<section class="cover">
+  <div class="band">
+    <img src="img/icon.png" alt="">
+    <h1>Surround Bridge</h1>
+    <div class="sub">Everything your PC plays, sent to your amp as real surround sound</div>
+  </div>
+  <div class="meta">User manual · Windows 1.3.4 · November 2026<br>
+    Also covers the Mac version (macOS 14 or later) where it differs.</div>
+
+  <div class="contents">
+    <h2>Contents</h2>
+    <ol class="toc">
+      <li><span class="n">1</span>Overview</li>
+            <li><span class="n">2</span>Installing on Windows</li>
+      <li><span class="n">3</span>Installing on a Mac</li>
+      <li><span class="n">4</span>Everyday use: the flyout</li>
+      <li><span class="n">5</span>Upmix modes and sliders</li>
+      <li><span class="n">6</span>Bass and treble boost</li>
+      <li><span class="n">7</span>Settings</li>
+      <li><span class="n">8</span>5.1 and 7.1 from your apps</li>
+      <li><span class="n">9</span>Troubleshooting</li>
+      <li><span class="n">10</span>Uninstalling</li>
+      <li><span class="n">11</span>Credits</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ======================================================== 1 overview -->
+<section class="chapter">
+  <h1><span class="num">1</span>Overview</h1>
+  <p class="lead">Surround Bridge turns your computer into a surround source. Whatever plays (a streaming
+  site, a game, a music app, a video call) reaches your receiver, soundbar or amplifier as
+  <b>Dolby Digital</b>, <b>DTS</b> or <b>multichannel PCM</b>, over HDMI or optical.</p>
+
+  <p>Sound cards used to do this with a feature called "Dolby Digital Live". Today most computers only
+  send stereo over optical, and many amplifiers and soundbars (especially ones connected through the
+  TV's optical output) can only play surround when it arrives as Dolby Digital or DTS. Surround
+  Bridge fills that gap:</p>
+  <ul>
+    <li><b>Stereo becomes 5.1.</b> Ordinary stereo (music, YouTube, most games) is upmixed: dialogue and
+      vocals go to the centre speaker, room sound and ambience to the surrounds, bass to the subwoofer.
+      Four presets and a set of sliders let you choose how much.</li>
+    <li><b>5.1 stays 5.1.</b> Apps that already play 5.1 or 7.1 pass straight through, untouched.</li>
+    <li><b>Bass and treble boost</b> keep music full at low volume.</li>
+    <li><b>Live meters</b> show which channels come in and which go out, as it plays.</li>
+  </ul>
+
+  <h2>How it works</h2>
+  <div class="flow">
+    <div class="box"><b>Your apps</b>play as usual</div>
+    <div class="arrow">→</div>
+    <div class="box"><b>Virtual cable</b>VB-Audio Virtual Cable<br>(Mac: the Surround Bridge device)</div>
+    <div class="arrow">→</div>
+    <div class="box us"><b>Surround Bridge</b>upmix, tone,<br>encode</div>
+    <div class="arrow">→</div>
+    <div class="box"><b>HDMI or optical</b>to the TV, receiver or soundbar</div>
+    <div class="arrow">→</div>
+    <div class="box"><b>Your speakers</b>5.1 surround</div>
+  </div>
+  <p>While Surround Bridge is on, it points Windows' sound output at a <b>virtual audio cable</b>, an
+  invisible sound device that apps play into. Surround Bridge listens to the other end of the cable,
+  processes the sound and sends it to your HDMI or optical output, which it uses exclusively while
+  it's on. Switch it off and Windows' previous output comes back.</p>
+  <p>The whole chain adds roughly a tenth of a second of delay (about 120–150 ms with Dolby Digital,
+  about 90–110 ms with PCM). That's fine for music and usually unnoticeable for video; see
+  <i>Troubleshooting</i> if lip sync bothers you.</p>
+
+  <h2>What you need</h2>
+  <ul>
+    <li><b>Windows 10 or 11</b> (64-bit), or a <b>Mac</b> with macOS 14 or later.</li>
+    <li>An <b>HDMI or optical (S/PDIF) output</b> connected to your TV, receiver, soundbar or amplifier.
+      Most PCs with a graphics card have HDMI audio.</li>
+    <li>Something that <b>decodes Dolby Digital or DTS</b>: practically every AV receiver and surround
+      soundbar does. For <b>multichannel PCM</b> you need an AV receiver connected by HDMI (optical
+      can't carry it).</li>
+    <li>On Windows, <b>VB-Audio Virtual Cable</b>, a free virtual sound device. Surround Bridge downloads
+      and installs it for you the first time (see the next chapter). The Mac version brings its own.</li>
+  </ul>
+</section>
+
+<!-- ======================================================== 3 install windows -->
+<section class="chapter">
+  <h1><span class="num">2</span>Installing on Windows</h1>
+  <div class="side wide-text">
+    <div>
+      <ol class="steps">
+        <li><b>Download</b> <span class="ui">SurroundBridge-Setup-1.3.4-windows-x64.exe</span> from the
+          project's GitHub page (the <i>releases</i> branch, or the Releases list). It's one file of about
+          70 MB with everything included.</li>
+        <li><b>Open it.</b> It isn't code-signed yet, so Windows SmartScreen may warn the first time: click
+          <span class="ui">More info</span>, then <span class="ui">Run anyway</span>.</li>
+        <li><b>Click Install.</b> It installs for your account only, so no administrator password is
+          needed. Leave <span class="ui">Start Surround Bridge when I sign in</span> ticked if you want it
+          ready after every restart; tick <span class="ui">Add a desktop shortcut</span> if you like.</li>
+        <li><b>Find the icon.</b> Surround Bridge lives in the <b>notification area</b> at the right of the
+          taskbar (a speaker icon). If Windows hides it under the <b>^</b> arrow, drag it onto the taskbar
+          to keep it in view.</li>
+      </ol>
+    </div>
+    <figure class="fig-m"><img src="img/setup-install.png" alt="The installer window">
+      <figcaption>The installer: Install, or Update when a newer version replaces an older one.</figcaption></figure>
+  </div>
+
+  <h2>First run: the virtual cable</h2>
+  <div class="side wide-text">
+    <div>
+      <ol class="steps" start="5" style="counter-reset: s 4">
+        <li><b>Click the icon and switch Surround Bridge on.</b> The first time, the flyout explains that it
+          needs <b>VB-Audio Virtual Cable</b> and offers <span class="ui">Install VB-Audio Virtual Cable…</span>.</li>
+        <li><b>Click it.</b> Surround Bridge downloads VB-Audio's official installer, checks its digital
+          signature and opens it. In VB-Audio's window, click <span class="ui">Install Driver</span>. This
+          is the one step that asks for administrator permission.</li>
+        <li><b>Done.</b> Surround Bridge starts by itself once the cable appears. Occasionally Windows
+          needs a restart before it does.</li>
+        <li><b>Check the output.</b> Open <span class="ui">Settings…</span> ▸ <span class="ui">General</span> and make
+          sure <span class="ui">Send to</span> shows the HDMI or optical output your amp is connected to.</li>
+      </ol>
+      <p>That's it: play something and it comes out of all your speakers. The status line in the flyout
+      shows what's going out, for example <i>Dolby Digital 5.1 → SAMSUNG · ~120 ms</i>.</p>
+    </div>
+    <figure class="fig-s"><img src="img/flyout-setup.png" alt="The flyout offering to install the cable">
+      <figcaption>The first time, the flyout offers to install the virtual cable.</figcaption></figure>
+  </div>
+  <div class="note"><p><span class="label">Exclusive mode.</span>Surround Bridge needs your HDMI or optical output to
+  itself while it's on. If nothing reaches the amp, open Windows' Sound settings ▸ your HDMI/optical
+  device ▸ <span class="ui">Advanced</span> and make sure <span class="ui">Allow applications to take exclusive control of this device</span> is ticked.</p></div>
+</section>
+
+<!-- ======================================================== 4 install mac -->
+<section>
+  <h1 style="margin-top:8mm"><span class="num">3</span>Installing on a Mac</h1>
+  <ol class="steps">
+    <li><b>Download</b> <span class="ui">SurroundBridge-&lt;version&gt;.pkg</span> from the same GitHub page (the
+      <i>macOS</i> folder of the releases branch). It runs on Apple Silicon and Intel Macs with macOS 14 or later.</li>
+    <li><b>Open it.</b> It isn't signed by a registered developer yet, so the first time right-click it in
+      Finder ▸ <span class="ui">Open</span> ▸ <span class="ui">Open</span>.</li>
+    <li>The installer puts <b>Surround Bridge</b> in Applications and adds the <b>Surround Bridge audio
+      device</b>, the virtual output your apps play into (the Mac's sound restarts once for it). There's
+      nothing else to download.</li>
+    <li>Surround Bridge lives in the <b>menu bar</b> (the speaker icon, top right). Switch it on; the first
+      time macOS asks to let it <b>listen to audio input</b>: allow it (macOS treats listening to a sound
+      device like a microphone). Pick your TV, receiver or soundbar under <span class="ui">Settings ▸ General</span>.</li>
+  </ol>
+  <p>The Mac version has the same upmix modes, sliders, tone controls and formats as the Windows
+  version. The newest Windows features (the per-channel meters and the automatic 5.1 handling of
+  chapter 8) come to the Mac in a later version.</p>
+</section>
+
+<!-- ======================================================== 5 flyout -->
+<section class="chapter">
+  <h1><span class="num">4</span>Everyday use: the flyout</h1>
+  <p class="lead">Click the Surround Bridge icon in the notification area to open the flyout. It has
+  everything you need while listening; click anywhere else (or press Esc) to close it.</p>
+  <div class="side">
+    <figure class="fig-s" style="--w:74mm"><div class="shot"><img src="img/flyout-meters-upmix.png" alt="The flyout while stereo is upmixed">
+        <span class="m" style="left:99%; top:10.4%">1</span>
+        <span class="m" style="left:1%; top:12.5%">2</span>
+        <span class="m" style="left:1%; top:24.5%">3</span>
+        <span class="m" style="left:1%; top:40%">4</span>
+        <span class="m" style="left:1%; top:81%">5</span>
+        <span class="m" style="left:1%; top:93.5%">6</span></div>
+      <figcaption>Stereo playing, upmixed to 5.1 with the Music preset.</figcaption></figure>
+    <div>
+      <ul class="callouts">
+        <li><span class="k">1</span><b>On/off switch</b> (top right). On: Windows' sound goes through Surround
+          Bridge to your amp. Off: your previous output comes back.</li>
+        <li><span class="k">2</span><b>Status line</b> under the name: the format going out right now, the
+          output it goes to and the estimated delay. The dot is green while it plays, amber while it's
+          starting, grey when it's off.</li>
+        <li><span class="k">3</span><b>Level meters</b>: one bar per channel, <b>In</b> on the left and
+          <b>Out</b> on the right, labelled by speaker (see below).</li>
+        <li><span class="k">4</span><b>Stereo upmix</b>: the upmix mode and its main sliders
+          (chapter 5). The sliders appear while the upmix is on.</li>
+        <li><span class="k">5</span><b>Bass</b> and <b>Treble</b> boost (chapter 6).</li>
+        <li><span class="k">6</span><span class="ui">Settings…</span> for the output, format and the advanced upmix
+          controls; <span class="ui">Quit</span> switches off and closes Surround Bridge.</li>
+      </ul>
+      <p>Every change applies while the sound plays.</p>
+    </div>
+  </div>
+
+  <h2>Reading the meters</h2>
+  <p>The meters show only the channels in use, so you can see at a glance what Surround Bridge is doing:</p>
+  <div class="side wide-text" style="grid-template-columns: 1.45fr 1fr; gap: 6mm">
+    <div>
+      <table style="margin-top:0">
+        <tr><th>What's playing</th><th>In</th><th>Out</th></tr>
+        <tr><td>Stereo, upmix on</td><td>L R</td><td>L R C LFE Ls Rs</td></tr>
+        <tr><td>Stereo, upmix off</td><td>L R</td><td>L R</td></tr>
+        <tr><td>5.1 from an app</td><td>L R C LFE Ls Rs</td><td>the same 6</td></tr>
+        <tr><td>7.1 (PCM)</td><td>L R C LFE Lb Rb Ls Rs</td><td>the same 8</td></tr>
+      </table>
+      <p>The labels are the speakers: <b>L</b>/<b>R</b> front left and right, <b>C</b> centre, <b>LFE</b> the
+      subwoofer channel, <b>Ls</b>/<b>Rs</b> surround (side) left and right, <b>Lb</b>/<b>Rb</b> back left and right.
+      Green is normal level; the top of a bar turns yellow and red close to full scale.</p>
+    </div>
+    <div>
+      <figure class="fig-strip" style="margin-top:0"><img src="img/flyout-meters-51-top.png" alt="5.1 in and 5.1 out">
+        <figcaption>A 5.1 film: six channels in, the same six out.</figcaption></figure>
+      <figure class="fig-strip"><img src="img/flyout-meters-stereo-in-51-top.png" alt="Stereo with the upmix off">
+        <figcaption>Stereo on a 5.1 cable, upmix off: two in, two out.</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================== 6 upmix -->
+<section>
+  <h1 style="margin-top:8mm"><span class="num">5</span>Upmix modes and sliders</h1>
+  <p class="lead">The upmix spreads stereo over your 5.1 speakers. It only works on stereo: sound that's
+  already 5.1 is never upmixed.</p>
+  <table>
+    <tr><th style="width:28mm">Mode</th><th>What it does</th></tr>
+    <tr><td>Off</td><td>Stereo stays stereo. Use it when you want your amp's own upmix (Dolby Surround,
+      DTS Neural:X and the like), or plain two-channel listening.</td></tr>
+    <tr><td>Music</td><td>Gentle room sound in the rears; vocals stay between the front speakers. The default.</td></tr>
+    <tr><td>Movies &amp; TV</td><td>Dialogue locked to the centre speaker, ambience behind you.</td></tr>
+    <tr><td>Wide</td><td>Bigger, more enveloping sound with stronger rears and a wider front.</td></tr>
+    <tr><td>Custom</td><td>Your own settings: moving any slider switches to Custom, starting from the preset you were on.</td></tr>
+  </table>
+
+  <h2>The sliders</h2>
+  <table>
+    <tr><th style="width:28mm">Slider</th><th>Range</th><th>What it does</th></tr>
+    <tr><td>Surround</td><td class="nw">−20 to +6 dB</td><td>How loud the rear (surround) speakers are.</td></tr>
+    <tr><td>Centre focus</td><td class="nw">Phantom–Locked</td><td>How much of what's in the middle of the stereo picture (voices,
+      solo instruments) goes to the centre speaker. <b>Phantom</b> leaves the centre speaker silent and
+      keeps voices between the front pair, as in stereo; <b>Locked</b> puts them firmly in the centre.</td></tr>
+    <tr><td>Front width</td><td class="nw">0–100%</td><td>How wide the front sound is. 50% is <b>As recorded</b>; higher pushes sounds
+      further out to the sides.</td></tr>
+    <tr><td>Subwoofer</td><td class="nw">−20 to +6 dB</td><td>How loud the subwoofer (LFE) channel is.</td></tr>
+  </table>
+
+  <h3>Advanced (Settings ▸ Upmix)</h3>
+  <table>
+    <tr><th style="width:28mm">Setting</th><th>What it does</th></tr>
+    <tr><td>Bass crossover</td><td>Bass below this frequency goes to the subwoofer channel. Changing it causes a short dropout.</td></tr>
+    <tr><td>Bass to subwoofer</td><td><b>Copy</b>: the main speakers keep their bass too. <b>Move</b>: it's taken out of them.
+      Most AV receivers already send the speakers' bass to the subwoofer, so a strong subwoofer
+      level can double the bass.</td></tr>
+    <tr><td>Rear delay</td><td>0–30 ms. Keeps sounds anchored at the front by letting the rears arrive a little later.</td></tr>
+    <tr><td>Rear high-cut</td><td>Softens the top end of the rears, so they read as room sound rather than as
+      speakers you can point at.</td></tr>
+  </table>
+  <figure class="fig-m"><img src="img/settings-upmix.png" alt="Settings, Upmix tab">
+    <figcaption>Settings ▸ Upmix, with the Advanced section open.</figcaption></figure>
+</section>
+
+<!-- ======================================================== 7 tone -->
+<section>
+  <h1 style="margin-top:9mm"><span class="num">6</span>Bass and treble boost</h1>
+  <p>Our ears lose bass first, and treble too, when sound gets quiet (the <i>Fletcher-Munson</i>, or
+  equal-loudness, curves). That's why music played softly sounds thin. Turn up <b>Bass</b> and
+  <b>Treble</b> (each Off to +12 dB) for late-night listening at low volume and turn them back down for
+  normal levels.</p>
+  <ul>
+    <li>The bass boost is a gentle shelf below about 100 Hz, the treble boost a shelf above about 6 kHz.
+      The middle, where voices are, is untouched.</li>
+    <li>It works on <b>everything</b>: upmixed stereo, plain stereo with the upmix off, and 5.1 from apps.</li>
+    <li>It stays as you set it when you change the upmix mode, and a built-in limiter keeps the boost
+      from clipping.</li>
+    <li>With both at <b>Off</b>, the sound is untouched, bit for bit.</li>
+  </ul>
+
+  <!-- ======================================================== 8 settings -->
+  <h1 style="break-before: page"><span class="num">7</span>Settings</h1>
+  <p>Open the flyout and click <span class="ui">Settings…</span>. The <b>General</b> tab has:</p>
+  <div class="side wide-text">
+    <div>
+      <ul>
+        <li><b>Send to</b>: the HDMI or optical output your TV, receiver or soundbar is connected to.
+          Surround Bridge uses it exclusively while it's on, and starts by itself when it reappears (for
+          example when you switch the TV on).</li>
+        <li><b>Switch Windows' sound to Surround Bridge while it's on</b>: leave this ticked so everything
+          plays through it. Switching off puts the previous output back.</li>
+        <li><b>Format</b>: <span class="ui">Dolby Digital (AC3)</span>, <span class="ui">DTS</span> or
+          <span class="ui">Multichannel PCM</span>, and the <b>Bitrate</b> for Dolby Digital (384, 448 or
+          640 kb/s; 640 is best) and DTS (full or half rate). See <i>Which format?</i> below.</li>
+        <li><b>Virtual audio device</b>: whether VB-Audio Virtual Cable is installed, with a link to its website.</li>
+        <li><b>Start Surround Bridge when you sign in</b>.</li>
+      </ul>
+      <p>The <b>Upmix</b> tab has the full sliders, the advanced settings and the tone controls; <b>About</b>
+      shows the version, the credits and the uninstall button.</p>
+    </div>
+    <figure class="fig-m"><img src="img/settings-general.png" alt="Settings, General tab">
+      <figcaption>Settings ▸ General.</figcaption></figure>
+  </div>
+  <div class="tip" style="margin-top:5mm"><p><span class="label">Which format?</span>Choose <b>Dolby Digital</b> unless you have a reason
+  not to: it works over optical and through TVs, and every surround decoder plays it. Choose
+  <b>Multichannel PCM</b> if your computer is connected straight to an AV receiver by HDMI: it's
+  uncompressed and has the least delay. <b>DTS</b> is there for amps that prefer it (some TVs don't pass DTS through).</p></div>
+
+</section>
+
+<!-- ======================================================== 9 multichannel -->
+<section class="chapter">
+  <h1><span class="num">8</span>5.1 and 7.1 from your apps</h1>
+  <p class="lead">Out of the box the virtual cable is stereo, so apps that could play 5.1 (Netflix in a
+  browser, film players, games) mix it down to stereo first, and Surround Bridge then upmixes it. To
+  get real 5.1 through, set the cable to 5.1 or 7.1 once and leave it there.</p>
+
+  <h2>Setting the cable to 5.1 or 7.1 (Windows)</h2>
+  <ol class="steps">
+    <li>Open <b>Sound settings</b> ▸ <span class="ui">More sound settings</span> (the classic Sound window).</li>
+    <li>On the <span class="ui">Playback</span> tab, select <b>CABLE Input</b> ▸ <span class="ui">Configure</span>, choose
+      <b>5.1 Surround</b> (or <b>7.1 Surround</b>) and finish the wizard.</li>
+    <li>On the <span class="ui">Recording</span> tab, open <b>CABLE Output</b> ▸ <span class="ui">Properties</span> ▸
+      <span class="ui">Advanced</span> and choose the same number of channels (6 for 5.1, 8 for 7.1) at 48000 Hz.</li>
+    <li>Switch Surround Bridge off and on again so it picks up the new format.</li>
+  </ol>
+
+  <h2>What happens then</h2>
+  <p>Windows mixes every app into the cable's format, so the cable always carries 5.1 (or 7.1) even when
+  an app plays stereo; the extra channels are simply silent. Surround Bridge therefore listens to the
+  sound itself:</p>
+  <table>
+    <tr><th style="width:34mm">What's playing</th><th>Upmix on</th><th>Upmix off</th></tr>
+    <tr><td>5.1 or 7.1</td><td colspan="2">Passed through as it is, straight away. (Dolby Digital and DTS carry 5.1;
+      multichannel PCM carries 7.1 too.)</td></tr>
+    <tr><td>Stereo</td><td>Upmixed to 5.1, once only the front pair has had sound for about 3 seconds
+      (straight away if it's the first thing that plays).</td>
+      <td>Sent as <b>2.0</b>, so your amp sees stereo and its own upmix can be switched on.</td></tr>
+    <tr><td>Silence, pauses</td><td colspan="2">Nothing changes, so pausing a film doesn't switch anything.</td></tr>
+  </table>
+  <ul>
+    <li>With the upmix on, a change crossfades over a few hundredths of a second.</li>
+    <li>With the upmix off, the stream switches between 2.0 and 5.1 to match. Most amps mute for a moment
+      when that happens. With <b>multichannel PCM</b> the HDMI output itself is reopened with the new
+      channel count, which gives a short silence while the TV and amp switch over.</li>
+    <li>Bass and treble boost apply either way.</li>
+  </ul>
+  <div class="tip"><p><span class="label">Tip.</span>The meters show this as it happens: a 5.1 cable playing stereo shows
+  just <b>L R</b> under <b>In</b>.</p></div>
+</section>
+
+<!-- ======================================================== 10 troubleshooting -->
+<section class="chapter">
+  <h1><span class="num">9</span>Troubleshooting</h1>
+  <table>
+    <tr><th style="width:44mm">Problem</th><th>What to do</th></tr>
+    <tr><td>No sound from the amp</td><td>Check <span class="ui">Settings ▸ General ▸ Send to</span> is the output
+      your amp is connected to, and that it allows exclusive mode (Sound settings ▸ the device ▸
+      <span class="ui">Advanced</span>). Check the amp is set to the right input. If the status line says
+      Starting… for long, switch Surround Bridge off and on.</td></tr>
+    <tr><td>"The virtual audio cable isn't installed"</td><td>Click <span class="ui">Install VB-Audio Virtual Cable…</span> in
+      the flyout and then <span class="ui">Install Driver</span> in VB-Audio's window. If it still doesn't appear,
+      restart Windows.</td></tr>
+    <tr><td>"… isn't connected"</td><td>The TV or amp is off or unplugged. Switch it on; Surround Bridge starts by itself
+      when the output appears.</td></tr>
+    <tr><td>The amp shows PCM 2.0 or stereo</td><td>Surround Bridge isn't on, or Windows' output isn't the cable: switch it
+      on and keep <span class="ui">Switch Windows' sound to Surround Bridge</span> ticked. With the upmix off and the
+      cable at 5.1, stereo is sent as 2.0 on purpose (chapter 8).</td></tr>
+    <tr><td>DTS doesn't work</td><td>Some TVs don't pass DTS from HDMI to optical. Use Dolby Digital.</td></tr>
+    <tr><td>Clicks or dropouts</td><td>Close other apps that might use the HDMI device. Surround Bridge raises its
+      buffer by itself after a dropout. If it persists, try another bitrate or format.</td></tr>
+    <tr><td>Lip sync is off</td><td>The bridge adds about 0.1 s. Many players and TVs have an audio delay or AV sync
+      setting; delaying the video by the latency shown in the status line fixes it. Multichannel PCM
+      has the least delay.</td></tr>
+    <tr><td>Too much bass</td><td>Your receiver may already send the speakers' bass to the subwoofer: lower the
+      <b>Subwoofer</b> slider or set <span class="ui">Bass to subwoofer</span> to Copy.</td></tr>
+    <tr><td>Sound doesn't come back after quitting</td><td>Quitting restores your previous output. If something
+      went wrong (a crash), Surround Bridge restores it the next time it starts; you can also pick the output
+      in Windows' Sound settings.</td></tr>
+  </table>
+
+  <h1 style="break-before: page"><span class="num">10</span>Uninstalling</h1>
+  <p>On Windows, open <span class="ui">Settings ▸ About</span> and click <span class="ui">Uninstall Surround Bridge…</span>,
+  or use Windows Settings ▸ Apps ▸ Installed apps ▸ Surround Bridge. Your previous sound output is
+  restored. VB-Audio Virtual Cable stays installed; remove it with its own setup's
+  <span class="ui">Remove Driver</span> if you don't need it any more.</p>
+  <p>On a Mac, open <span class="ui">Settings ▸ About ▸ Uninstall</span>; it removes the app and its audio device.</p>
+
+  <h1 style="margin-top:9mm"><span class="num">11</span>Credits</h1>
+  <p>Apps play into <b>VB-Audio Virtual Cable</b>, free (donationware) software by VB-Audio Software, installed
+  with its own official installer; Surround Bridge isn't affiliated with VB-Audio. The Mac's audio device is
+  built from the open-source BlackHole driver (GPL-3) under Surround Bridge's own name; it isn't an official
+  BlackHole build. Audio processing uses <b>FFmpeg</b>, under the LGPL.</p>
+  <p>"Dolby Digital" and "DTS" are trademarks of their owners; Surround Bridge isn't affiliated with or
+  licensed by them. Surround Bridge is a sister app of <b>Surround Player</b>.</p>
+</section>
+
+</body>
+</html>

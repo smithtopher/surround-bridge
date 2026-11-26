@@ -1,5 +1,14 @@
 # Changelog
 
+## [Windows 1.3.4] — 2026-11-26
+
+- **The flyout shows every active input and output channel**, each with its own level meter and
+  speaker label: stereo is 2 in and 2 out, upmixed stereo 2 in and 5.1 out, 5.1 is 5.1 in and
+  5.1 out. A 5.1 cable carrying stereo shows the 2 channels in use.
+- **A user manual** ([PDF](docs/Surround-Bridge-User-Manual.pdf)), linked from the README.
+- **The flyout no longer runs off the bottom of the screen** when it gets taller (turning the
+  upmix on shows its sliders): it now grows upwards from the taskbar.
+
 ## [Windows 1.3.3] — 2026-11-24
 
 - **Multichannel PCM too: stereo goes out as 2-channel PCM** with the upmix off and the cable at

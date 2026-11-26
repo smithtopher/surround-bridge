@@ -494,4 +494,11 @@
         <GradientStop Color="#E8B31A" Offset="0.88" />
         <GradientStop Color="#E5484D" Offset="1" />
     </LinearGradientBrush>
+    <!-- the same, bottom to top (the flyout's channel bars) -->
+    <LinearGradientBrush x:Key="MeterFillV" StartPoint="0,1" EndPoint="0,0">
+        <GradientStop Color="#2EB85C" Offset="0" />
+        <GradientStop Color="#2EB85C" Offset="0.78" />
+        <GradientStop Color="#E8B31A" Offset="0.88" />
+        <GradientStop Color="#E5484D" Offset="1" />
+    </LinearGradientBrush>
 </ResourceDictionary>

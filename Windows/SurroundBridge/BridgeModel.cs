@@ -4,6 +4,7 @@
 // for a device to switch formats. Everything else runs on the UI thread.
 using System;
 using System.Collections.Concurrent;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -95,7 +96,7 @@ public sealed class BridgeModel : INotifyPropertyChanged
 
     public bool Enabled
     {
-        get => s.enabled;
+        get => s.enabled || previewOn;
         set { if (s.enabled == value) return; s.enabled = value; s.Save(); Changed(); Apply(); }
     }
 
@@ -287,18 +288,20 @@ public sealed class BridgeModel : INotifyPropertyChanged
         _ => new SolidColorBrush(Color.FromRgb(0xF0, 0x8A, 0x24)),
     };
 
-    /// Input level per channel, 0..1 for the meters (-60 dB .. 0 dB).
-    public unsafe double Meter(int ch)
+    /// The flyout's meters: the input channels in use (2 while a 5.1 cable carries stereo) and
+    /// what goes out (2, 5.1 or 7.1), by speaker.
+    public ObservableCollection<ChannelMeter> InMeters { get; } = new();
+    public ObservableCollection<ChannelMeter> OutMeters { get; } = new();
+
+    private unsafe void UpdateMeters()
     {
-        if (state != BridgeState.Running || ch >= status.channels) return 0;
-        float db;
-        fixed (float* p = status.peak_db) db = p[ch];
-        return Math.Clamp((db + 60) / 60.0, 0, 1);
+        if (state != BridgeState.Running) { InMeters.Clear(); OutMeters.Clear(); return; }
+        var st = status;
+        float[] inDb = new float[8], outDb = new float[8];
+        for (int i = 0; i < 8; i++) { inDb[i] = st.peak_db[i]; outDb[i] = st.out_peak_db[i]; }
+        ChannelLayout.Update(InMeters, ChannelLayout.Channels(st.in_mask, st.in_active, st.channels), i => inDb[i]);
+        ChannelLayout.Update(OutMeters, ChannelLayout.Channels(st.out_mask, 0, st.out_channels), i => outDb[i]);
     }
-    public double MeterL => Meter(0);
-    public double MeterR => Meter(1);
-    public double MeterLRest => 1 - Meter(0);   // the meters' cover (see Theme.xaml MeterFill)
-    public double MeterRRest => 1 - Meter(1);
 
     /// Faster status while the menu is open (meters); once a second otherwise.
     public bool FastStatus { set => timer.Interval = TimeSpan.FromMilliseconds(value ? 100 : 1000); }
@@ -423,7 +426,22 @@ public sealed class BridgeModel : INotifyPropertyChanged
     }
 
     /// Snapshots only: show a state's UI without doing anything.
-    internal void PreviewState(BridgeState st) => State = st;
+    internal void PreviewState(BridgeState st) { previewOn = false; State = st; UpdateMeters(); Changed(nameof(Enabled)); }
+    private bool previewOn;   // snapshots: the switch drawn on, without switching anything on
+
+    /// Snapshots only: running, with these meters (dB per channel).
+    internal unsafe void PreviewMeters(int inCh, uint inMask, uint inActive, int outCh, uint outMask, float[] inDb, float[] outDb)
+    {
+        var st = new Native.SBStatus { running = 1, channels = inCh, in_mask = inMask, in_active = inActive,
+                                       out_channels = outCh, out_mask = outMask, latency_ms = 120 };
+        for (int i = 0; i < 8; i++) { st.peak_db[i] = i < inDb.Length ? inDb[i] : -120; st.out_peak_db[i] = i < outDb.Length ? outDb[i] : -120; }
+        status = st;
+        previewOn = true;
+        State = BridgeState.Running;
+        UpdateMeters();
+        Changed(nameof(Enabled));
+        Changed(nameof(StatusLine));
+    }
 
     /// Quit / log off / uninstall: synchronous, so the device and Windows' output are restored before exit.
     public void Shutdown()
@@ -488,10 +506,7 @@ public sealed class BridgeModel : INotifyPropertyChanged
             {
                 if (state != BridgeState.Running) return;
                 status = st;
-                Changed(nameof(MeterL));
-                Changed(nameof(MeterR));
-                Changed(nameof(MeterLRest));
-                Changed(nameof(MeterRRest));
+                UpdateMeters();
                 Changed(nameof(StatusLine));
                 if (st.running == 0) RestartIfOn();   // the pipeline stopped by itself (device gone)
                 if (Debug)

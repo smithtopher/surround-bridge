@@ -11,6 +11,10 @@ optical → AC3 amp), where multichannel PCM isn't an option.
 Downloads are on the [`releases` branch](https://github.com/smithtopher/surround-bridge/tree/releases)
 (`Windows/`, and `macOS/`).
 
+**[User manual (PDF)](docs/Surround-Bridge-User-Manual.pdf)**: overview, installing on Windows and
+the Mac, everyday use, the upmix and tone controls, 5.1 from your apps, and troubleshooting, with
+screenshots.
+
 ## Install (macOS 14+)
 
 1. Open **SurroundBridge-1.1.0.pkg**. It isn't signed by a registered developer yet, so the first
@@ -44,7 +48,7 @@ Everything applies while it plays.
 
 ## Install (Windows 10/11, 64-bit)
 
-1. Open **SurroundBridge-Setup-1.3.3-windows-x64.exe**. It isn't code-signed yet, so Windows
+1. Open **SurroundBridge-Setup-1.3.4-windows-x64.exe**. It isn't code-signed yet, so Windows
    SmartScreen may warn the first time: **More info** → **Run anyway**.
 2. Click **Install**. It installs for your account only (no administrator password), adds a Start menu
    shortcut, and starts. Surround Bridge lives in the **notification area** of the taskbar (the

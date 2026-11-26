@@ -72,6 +72,10 @@ internal static unsafe class Native
         public int channels;
         public long gaps;
         public int out_channels;
+        public fixed float out_peak_db[8];
+        public uint in_mask;
+        public uint in_active;
+        public uint out_mask;
     }
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]

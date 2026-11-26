@@ -77,6 +77,20 @@ docs/PLAN.md the roadmap.
   `restoreOutputUID`/`restoreCommsOutputUID`); C calls on one `SerialQueue` thread. Device changes via
   `pc_set_device_change_callback` (debounced 600 ms); wake via SystemEvents.PowerModeChanged.
   Virtual device = input named "CABLE Output"; apps play to the output "CABLE Input".
+- **Flyout meters (Windows 1.3.4, 2026-11-26):** `SBStatus` has `out_peak_db[8]` (measured on what
+  goes to the encoder/PCM, `update_out_peaks`), `in_mask` (the input layout), `in_active` (FL|FR
+  while a 5.1 cable carries stereo: auto upmixing or `stereo_out`) and `out_mask` (stereo while
+  the 2.0 stream goes out). AV_CH_* bits, channel i = i-th set bit; 0 = FFmpeg's default for the
+  count. `ChannelMeters.cs` turns them into labelled vertical bars (L R C LFE Ls Rs Lb Rb), In → Out.
+  `sbridge file` prints a "meters:" line at the end; regress "meters". The flyout keeps its
+  bottom edge on the taskbar when its height changes (`anchorBottom`, SizeChanged); it used to
+  grow down off the screen when the upmix sliders appeared.
+- **User manual:** `docs/manual/manual.html` (+ `img/`) -> `docs/Surround-Bridge-User-Manual.pdf` with
+  `scripts\make_manual.ps1` (fresh screenshots from the packaged exe's `--snapshot`, light theme,
+  scratch settings, `SURROUND_BRIDGE_TEST_ROOT=C:\Users\You\AppData\Local` so the install path shows
+  no real user; crops the meter examples; Edge headless prints it). Rebuild it when the UI or the
+  version changes (the cover names the version). To look at the pages without poppler, render them
+  with Windows.Data.Pdf from PowerShell (WinRT `PdfDocument` -> `RenderToStreamAsync`).
 - UI: `FlyoutWindow` (tray popover), `SettingsWindow` (General/Upmix/About), `UpmixSliders`
   (compact/full), `ToneSliders` (compact/full), `Theme.xaml` + `Theme.cs` (own control templates, light/dark from AppsUseLightTheme,
   accent = the icon's indigo). The themed ComboBox shows the item's `ToString()` in its

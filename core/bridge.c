@@ -105,7 +105,7 @@ struct SBBridge {
 
     // status (worker writes, sb_bridge_status reads; doubles are fine to tear-read for display)
     _Atomic double st_fill, st_ppm;
-    float peaks[8];
+    float peaks[8], out_peaks[8];
     int peak_frames;
     char out_desc[512];
     uint8_t silence[PC_MAX_BURST_BYTES];   // one encoded-silence burst, for the start-up prefill
@@ -297,6 +297,27 @@ static void *feeder_thread(void *arg) {
 // ---------------------------------------------------------------------------
 // worker: ring -> resample -> [upmix] -> encode -> IEC 61937 -> output
 
+// Output level meters: `n` frames as they go out (b->fmt, the output layout).
+static void update_out_peaks(SBBridge *b, uint8_t **d, int n) {
+    int ch = b->enc_layout.nb_channels > 8 ? 8 : b->enc_layout.nb_channels;
+    int all = b->enc_layout.nb_channels;
+    for (int c = 0; c < ch; c++) {
+        float pk = b->out_peaks[c];
+        for (int i = 0; i < n; i++) {
+            float v;
+            switch (b->fmt) {
+            case AV_SAMPLE_FMT_FLTP: v = ((const float *)d[c])[i]; break;
+            case AV_SAMPLE_FMT_FLT: v = ((const float *)d[0])[i * all + c]; break;
+            case AV_SAMPLE_FMT_S32: v = ((const int32_t *)d[0])[i * all + c] / 2147483648.f; break;
+            default: v = 0; break;
+            }
+            v = fabsf(v);
+            if (v > pk) pk = v;
+        }
+        b->out_peaks[c] = pk;
+    }
+}
+
 // PCM: everything in the fifo, as packed float frames in the device's layout.
 static int send_pcm(SBBridge *b, int serial) {
     int n = av_audio_fifo_size(b->fifo);
@@ -305,6 +326,7 @@ static int send_pcm(SBBridge *b, int serial) {
     uint8_t **tmp = NULL;
     if (av_samples_alloc_array_and_samples(&tmp, NULL, ch, n, AV_SAMPLE_FMT_FLT, 0) < 0) return -1;
     av_audio_fifo_read(b->fifo, (void **)tmp, n);
+    update_out_peaks(b, tmp, n);
     int r = pc_out_write(b->out, tmp[0], n * ch * (int)sizeof(float), NAN, &b->out_serial, serial) < 0 ? -1 : 0;
     if (r == 0) b->out_samples += n;
     av_freep(&tmp[0]);
@@ -323,6 +345,7 @@ static int send_bursts(SBBridge *b, int serial) {
     int r = 0, ch = b->enc_layout.nb_channels;
     while (av_audio_fifo_size(b->fifo) >= fs) {
         av_audio_fifo_read(b->fifo, (void **)tmp, fs);
+        update_out_peaks(b, tmp, fs);
         for (int c = 0; c < nplanes; c++) planes[c] = tmp[c];
         const uint8_t *burst = NULL;
         int n = pc_enc_encode(b->enc, planes, &burst);
@@ -881,6 +904,7 @@ int sb_bridge_start(SBBridge *b, const SBConfig *cfg, char *err, int errlen) {
     b->cooldown_until = 0;
     atomic_store(&b->jumps, 0);
     memset(b->peaks, 0, sizeof(b->peaks));
+    memset(b->out_peaks, 0, sizeof(b->out_peaks));
 
     // 1. input
     if (b->cfg.input_file) {
@@ -1105,7 +1129,16 @@ void sb_bridge_status(SBBridge *b, SBStatus *st) {
     st->latency_ms = lat * 1000;
     for (int c = 0; c < 8; c++) {
         st->peak_db[c] = b->peaks[c] > 1e-6f ? 20 * log10f(b->peaks[c]) : -120;
-        if (b->peak_frames > 24000) b->peaks[c] *= 0.5f;   // decay so the meter follows the music
+        st->out_peak_db[c] = b->out_peaks[c] > 1e-6f ? 20 * log10f(b->out_peaks[c]) : -120;
+        if (b->peak_frames > 24000) { b->peaks[c] *= 0.5f; b->out_peaks[c] *= 0.5f; }   // decay so the meters follow the music
+    }
+    if (b->running) {
+        // what's in use: a 5.1 cable carrying stereo is 2 channels in, whatever goes out
+        st->in_mask = b->in_lay.order == AV_CHANNEL_ORDER_NATIVE ? (unsigned)b->in_lay.u.mask : 0;
+        int stereo_in = (b->autodetect && b->upmixing) || (b->auto_enc && b->stereo_out);
+        st->in_active = stereo_in && st->in_mask ? (unsigned)(AV_CH_FRONT_LEFT | AV_CH_FRONT_RIGHT) : st->in_mask;
+        st->out_mask = b->auto_enc && b->stereo_out && !b->pcm ? (unsigned)AV_CH_LAYOUT_STEREO
+                     : b->enc_layout.order == AV_CHANNEL_ORDER_NATIVE ? (unsigned)b->enc_layout.u.mask : 0;
     }
     if (b->peak_frames > 24000) b->peak_frames = 0;
 }

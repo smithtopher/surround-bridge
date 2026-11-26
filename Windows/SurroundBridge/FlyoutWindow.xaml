@@ -10,6 +10,20 @@
         FontFamily="{StaticResource UiFont}" FontSize="13" UseLayoutRounding="True">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="Vis" />
+        <!-- one channel's meter: a vertical bar (fixed height, so the flyout doesn't change size with
+             the channel count) and its speaker label; 19 px each, so 7.1 in and 7.1 out (16) fit -->
+        <DataTemplate x:Key="ChannelBar">
+            <StackPanel Width="19">
+                <Grid Width="8" Height="38" HorizontalAlignment="Center">
+                    <Border CornerRadius="3" Background="{StaticResource MeterFillV}" />
+                    <Border CornerRadius="3" Background="{DynamicResource Track}" RenderTransformOrigin="0.5,0">
+                        <Border.RenderTransform><ScaleTransform ScaleY="{Binding Rest}" /></Border.RenderTransform>
+                    </Border>
+                </Grid>
+                <TextBlock Text="{Binding Label}" Style="{StaticResource CaptionText}" FontSize="9.5" HorizontalAlignment="Center"
+                           Margin="0,3,0,0" />
+            </StackPanel>
+        </DataTemplate>
     </Window.Resources>
     <Border x:Name="Root" Margin="12" CornerRadius="8" Background="{DynamicResource FlyoutBg}"
             BorderBrush="{DynamicResource CardBorder}" BorderThickness="1">
@@ -45,30 +59,27 @@
                 </StackPanel>
             </Border>
 
-            <!-- levels -->
+            <!-- levels: the input channels in use -> what goes out, one bar per speaker -->
             <Grid Margin="0,12,0,0" Visibility="{Binding IsRunning, Converter={StaticResource Vis}}">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="16" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="12" />
-                    <RowDefinition Height="12" />
-                </Grid.RowDefinitions>
-                <TextBlock Text="L" Style="{StaticResource CaptionText}" FontSize="10" VerticalAlignment="Center" FontFamily="Consolas" />
-                <Grid Grid.Column="1" Height="6">
-                    <Border CornerRadius="3" Background="{StaticResource MeterFill}" />
-                    <Border CornerRadius="3" Background="{DynamicResource Track}" RenderTransformOrigin="1,0.5">
-                        <Border.RenderTransform><ScaleTransform ScaleX="{Binding MeterLRest}" /></Border.RenderTransform>
-                    </Border>
-                </Grid>
-                <TextBlock Grid.Row="1" Text="R" Style="{StaticResource CaptionText}" FontSize="10" VerticalAlignment="Center" FontFamily="Consolas" />
-                <Grid Grid.Row="1" Grid.Column="1" Height="6">
-                    <Border CornerRadius="3" Background="{StaticResource MeterFill}" />
-                    <Border CornerRadius="3" Background="{DynamicResource Track}" RenderTransformOrigin="1,0.5">
-                        <Border.RenderTransform><ScaleTransform ScaleX="{Binding MeterRRest}" /></Border.RenderTransform>
-                    </Border>
-                </Grid>
+                <StackPanel>
+                    <TextBlock Text="In" Style="{StaticResource CaptionText}" FontSize="11" Margin="0,0,0,3" />
+                    <ItemsControl ItemsSource="{Binding InMeters}" ItemTemplate="{StaticResource ChannelBar}" Focusable="False">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="→" Style="{StaticResource CaptionText}" FontSize="14" VerticalAlignment="Center"
+                           Margin="6,10,6,0" />
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="Out" Style="{StaticResource CaptionText}" FontSize="11" Margin="0,0,0,3" />
+                    <ItemsControl ItemsSource="{Binding OutMeters}" ItemTemplate="{StaticResource ChannelBar}" Focusable="False">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
             </Grid>
 
             <Border Style="{StaticResource Rule}" />

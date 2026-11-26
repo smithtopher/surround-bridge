@@ -192,6 +192,10 @@ int main(int argc, char **argv) {
             printf("tone toggles: %d\n", toggles);
         }
         sb_bridge_wait(b);
+        sb_bridge_status(b, &st);   // the meters at the end (what the app's flyout shows)
+        printf("meters: in 0x%x active 0x%x out 0x%x (%d ch), out peaks", st.in_mask, st.in_active, st.out_mask, st.out_channels);
+        for (int c = 0; c < st.out_channels && c < 8; c++) printf(" %.0f", st.out_peak_db[c]);
+        printf("\n");
         sb_bridge_destroy(b);
         printf("done\n");
         return 0;

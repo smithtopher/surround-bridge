@@ -12,6 +12,7 @@ public partial class FlyoutWindow : Window
     private readonly BridgeModel model;
     private DateTime hiddenAt;
     private Action? noticeAction;
+    private double? anchorBottom;   // DIPs: the flyout's bottom edge sits here (taskbar below it)
 
     public FlyoutWindow(BridgeModel model)
     {
@@ -23,6 +24,9 @@ public partial class FlyoutWindow : Window
         CableSetup.Shared.PropertyChanged += (_, _) => UpdateNotice();
         UpdateNotice();
         Deactivated += (_, _) => HideFlyout();
+        // the height follows the content (upmix sliders shown or hidden, a notice): keep the edge
+        // next to the taskbar where it is, so a taller flyout grows away from it, not off screen
+        SizeChanged += (_, e) => { if (IsVisible && e.HeightChanged && anchorBottom is { } bottom) Top = bottom - e.NewSize.Height; };
         KeyDown += (_, e) => { if (e.Key == Key.Escape) HideFlyout(); };
     }
 
@@ -105,6 +109,7 @@ public partial class FlyoutWindow : Window
         else { left = w.Right / sx - width; top = w.Bottom / sy - height; }                              // right, or auto-hide
         Left = left;   // the window's own 12 px margin (for the shadow) keeps it off the edges
         Top = top;
+        anchorBottom = w.Top > m.Top && w.Bottom >= m.Bottom ? null : top + height;   // a top taskbar: grow downwards
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e)

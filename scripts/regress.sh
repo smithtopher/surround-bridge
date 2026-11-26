@@ -390,5 +390,18 @@ run "$W/auto2.flac" "$W/ap2.raw" --pcm --no-upmix && {
 }
 run "$W/auto.flac" "$W/apu.raw" --pcm && ! grep -q "pcm format" "$W/log.txt" && pass "pcm, upmix on: the output never reopens" || fail "pcm, upmix on: reopened"
 
+echo "meters: the active inputs and outputs (what the flyout shows)"
+meters() { # label want args...
+    local label=$1 want=$2; shift 2
+    run "$@" && { local r; r=$(grep -o 'in .* (.*ch)' "$W/log.txt"); [ "$r" = "$want" ] && pass "$label: $r" || fail "$label: '$r', want '$want'"; }
+}
+meters "stereo upmixed: 2 in, 5.1 out" "in 0x3 active 0x3 out 0x60f (6 ch)" "$W/centre.flac" "$W/m.out"
+meters "stereo, upmix off: 2 in, 2 out" "in 0x3 active 0x3 out 0x3 (2 ch)" "$W/centre.flac" "$W/m.out" --no-upmix
+meters "5.1: 5.1 in, 5.1 out" "in 0x60f active 0x60f out 0x60f (6 ch)" "$W/six.flac" "$W/m.out"
+meters "5.1 cable with stereo, upmixed: 2 active in, 5.1 out" "in 0x60f active 0x3 out 0x60f (6 ch)" "$W/auto2.flac" "$W/m.out"
+meters "5.1 cable with stereo, upmix off: 2 active in, 2 out" "in 0x60f active 0x3 out 0x3 (2 ch)" "$W/auto2.flac" "$W/m.out" --no-upmix
+meters "7.1 PCM: 7.1 in, 7.1 out" "in 0x63f active 0x63f out 0x63f (8 ch)" "$W/sevenone.flac" "$W/m.out" --pcm
+run "$W/six.flac" "$W/m.out" && { r=$(grep -o 'out peaks.*' "$W/log.txt"); [ "$r" = "out peaks -18 -18 -18 -18 -18 -18" ] && pass "output meters: every 5.1 channel at its level (the tones are -18 dB) ($r)" || fail "output meters: '$r'"; }
+
 [ $FAIL = 0 ] && echo "ALL PASSED" || echo "SOME CHECKS FAILED"
 exit $FAIL
